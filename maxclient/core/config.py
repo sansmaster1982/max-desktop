@@ -24,6 +24,10 @@ class AppPaths:
         self.settings_file = self.dir / "settings.json"
         self.session_file = self.dir / "session.json"
         self.token_file = self.dir / "max_auth_token.txt"
+        # deviceId — отдельный файл: пишется один раз и НЕ удаляется при выходе,
+        # чтобы для сервера это всегда было одно и то же устройство (смена
+        # deviceId = сигнал «новое устройство» для антифрода).
+        self.device_file = self.dir / "device_id.txt"
         self.db_file = self.dir / "cache.db"
         self.media_dir = self.dir / "media"
         self.media_dir.mkdir(parents=True, exist_ok=True)
@@ -84,9 +88,9 @@ class Session:
         if paths.token_file.exists():
             tok = paths.token_file.read_text(encoding="utf-8").strip()
             obj.token = tok or None
-        if not obj.device_id:
-            obj.device_id = str(uuid.uuid4())
-            obj.save()
+        # deviceId — из выделенного файла (источник истины). Если его нет:
+        # мигрируем из session.json, иначе генерируем один раз и фиксируем.
+        obj.device_id = _load_or_create_device_id(paths.device_file, obj.device_id)
         return obj
 
     @property
@@ -126,6 +130,24 @@ class Session:
             "device_id": self.device_id,
         }
         _write_json(self._paths.session_file, meta)
+
+
+def _load_or_create_device_id(path: Path, migrated: str = "") -> str:
+    """Стабильный deviceId: один раз создаём и фиксируем в отдельном файле.
+    При выходе из аккаунта файл не трогается — устройство остаётся тем же."""
+    try:
+        if path.exists():
+            existing = path.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+    except OSError:
+        pass
+    did = (migrated or "").strip() or str(uuid.uuid4())
+    try:
+        path.write_text(did, encoding="utf-8")
+    except OSError:
+        pass
+    return did
 
 
 def _read_json(path: Path) -> dict:
