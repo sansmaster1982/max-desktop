@@ -147,6 +147,10 @@ class MaxClient:
         """Открыть TLS, запустить читающий поток и выполнить INIT-хендшейк."""
         self._device_type = device_type
         self._closed = False
+        # Не плодим параллельные соединения: одно устройство — одна сессия
+        # (несколько живых сокетов с одним токеном = сигнал угона для антифрода).
+        if self._sock is not None:
+            self._teardown_socket()
         self._set_state(ConnectionState.CONNECTING)
         try:
             ctx = ssl.create_default_context()

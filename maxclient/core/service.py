@@ -54,6 +54,7 @@ class MaxService:
         self._processed_order: deque[int] = deque()
         self._contacts_cache: Optional[dict[int, Contact]] = None
         self._chat_fetch_ts: dict[int, float] = {}  # троттлинг history-фетча
+        self._last_sms_ts = 0.0  # кулдаун повторных SMS (анти «too many attempts»)
 
     @property
     def my_id(self) -> Optional[int]:
@@ -117,12 +118,22 @@ class MaxService:
             return True
         return False
 
+    SMS_COOLDOWN = 45.0  # сек между запросами SMS — чтобы не словить «too many attempts»
+
     def request_sms(self, phone: str) -> str:
+        wait = self.SMS_COOLDOWN - (time.time() - self._last_sms_ts)
+        if wait > 0:
+            raise ValueError(
+                f"Подождите {int(wait) + 1} c перед повторным запросом SMS "
+                "(частые запросы могут временно заблокировать номер)."
+            )
         phone = normalize_phone(phone)
         self.session.phone = phone
         if not self.client.is_connected:
             self.client.connect(device_type="ANDROID")
-        return self.client.start_auth_sms(phone)
+        token = self.client.start_auth_sms(phone)
+        self._last_sms_ts = time.time()
+        return token
 
     def confirm_sms(self, verify_token: str, code: str) -> tuple[Optional[str], Optional[str]]:
         if not self.client.is_connected:
