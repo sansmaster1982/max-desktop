@@ -1,0 +1,29 @@
+# Сборка
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+*.pyo
+
+# Бинарь публикуется в GitHub Releases, не в git
+*.exe
+
+# Локальные данные клиента (на всякий случай — реально лежат в %APPDATA%)
+*.log
+*.db
+session.json
+settings.json
+max_auth_token.txt
+debug.log
+
+# Внутренний план разработки (не для публичного репозитория)
+OPTIMIZATION_PLAN.md
+diag.bat
+
+# Окружение/IDE
+.venv/
+venv/
+.idea/
+.vscode/
+*.egg-info/

@@ -1,0 +1,5 @@
+# MAX Desktop — зависимости рантайма
+PySide6>=6.6          # Qt: GUI + QtMultimedia (видео/голос). Тянет Essentials и Addons.
+msgpack>=1.0          # сериализация payload протокола MAX
+requests>=2.28        # HTTP-загрузка/скачивание медиа (двухступенчатый upload)
+zstandard>=0.21       # распаковка zstd-кадров (LZ4-кадры — встроенный декодер)
