@@ -9,6 +9,11 @@
 шлёт в поле opcode заголовка кадра; cmd=1 в ответе означает успех.
 """
 
+# ─────────────────────────── keepalive ───────────────────────────
+PING = 1              # keepalive; ewc.java: new ewc("PING", 0, 1). Сервер рвёт
+                      # простаивающий сокет (SERVER_PING_TIMEOUT 11..61 c) — шлём
+                      # PING чаще таймаута, иначе дроп -> reconnect -> шторм re-auth.
+
 # ─────────────────────────── auth / session ───────────────────────────
 INIT = 6              # handshake: {userAgent:{deviceType, locale, appVersion}, deviceId}
 PROFILE = 16          # {} -> мой профиль
@@ -72,6 +77,7 @@ PUSH_OPCODES = frozenset(
 
 # Человекочитаемые имена для логов/отладки.
 NAMES = {
+    PING: "PING",
     INIT: "INIT",
     PROFILE: "PROFILE",
     AUTH_REQUEST: "AUTH_REQUEST",

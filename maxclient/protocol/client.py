@@ -8,6 +8,7 @@ on_push/on_state вызываются из читающего потока, об
 """
 from __future__ import annotations
 
+import random
 import socket
 import ssl
 import threading
@@ -112,6 +113,13 @@ class MaxClient:
         self._reconnect_thread: Optional[threading.Thread] = None
         self._reconnect_running = False
 
+        # Keepalive: держим сокет живым PING'ом, чтобы сервер не дропал по
+        # простою (иначе reconnect-шторм -> бан номера антифродом).
+        self._keepalive_thread: Optional[threading.Thread] = None
+        self._keepalive_stop: Optional[threading.Event] = None
+
+    KEEPALIVE_INTERVAL = 20.0  # сек; окно сервера 11..61 c, шлём с запасом
+
     # ───────────────────────── state / lifecycle ─────────────────────────
 
     @property
@@ -170,6 +178,7 @@ class MaxClient:
 
             self._init_session()
             self._set_state(ConnectionState.CONNECTED)
+            self._start_keepalive()
         except Exception:
             self._teardown_socket()
             self._set_state(ConnectionState.DISCONNECTED)
@@ -200,6 +209,7 @@ class MaxClient:
         self._set_state(ConnectionState.DISCONNECTED)
 
     def _teardown_socket(self) -> None:
+        self._stop_keepalive()
         sock = self._sock
         self._sock = None
         if sock is not None:
@@ -290,6 +300,50 @@ class MaxClient:
         else:
             self._set_state(ConnectionState.DISCONNECTED)
 
+    # ───────────────────────── keepalive ─────────────────────────
+
+    def _start_keepalive(self) -> None:
+        self._stop_keepalive()
+        self._keepalive_stop = threading.Event()
+        self._keepalive_thread = threading.Thread(
+            target=self._keepalive_loop, name="max-keepalive", daemon=True
+        )
+        self._keepalive_thread.start()
+
+    def _stop_keepalive(self) -> None:
+        ev = self._keepalive_stop
+        if ev is not None:
+            ev.set()
+        self._keepalive_thread = None
+
+    def _keepalive_loop(self) -> None:
+        ev = self._keepalive_stop
+        if ev is None:
+            return
+        while not self._closed:
+            # Прерываемый сон: stop.set() будит сразу.
+            if ev.wait(self.KEEPALIVE_INTERVAL):
+                return
+            if self._closed or self._sock is None:
+                return
+            self._send_fire(opcodes.PING, {})
+
+    def _send_fire(self, opcode: int, payload: dict) -> None:
+        """Отправить кадр без ожидания ответа (для PING). Ответ придёт как
+        кадр без нашего seq и тихо отбросится в push-обработчике."""
+        sock = self._sock
+        if sock is None or self._closed:
+            return
+        with self._send_lock:
+            seq = self._seq
+            self._seq = (self._seq + 1) & 0xFFFF
+            frame = build_frame(seq, opcode, payload)
+            try:
+                sock.sendall(frame)
+            except OSError:
+                return  # сокет мёртв — дроп обработает reader
+        self._debug(f">> {opcodes.name(opcode)} seq={seq} (keepalive)")
+
     # ───────────────────────── reconnect ─────────────────────────
 
     def _start_reconnect(self) -> None:
@@ -305,7 +359,10 @@ class MaxClient:
         self._reconnect_running = False
 
     def _reconnect_loop(self) -> None:
-        delay = 2.0
+        # База 5с + джиттер вместо 2с: даже при редком реальном разрыве не частим
+        # с re-login (это сигнал шторма для антифрода). С keepalive дропы редки.
+        base = 5.0
+        delay = base + random.uniform(0.0, 3.0)
         while self._reconnect_running and not self._closed:
             time.sleep(delay)
             if self._closed or not self._reconnect_running:
@@ -319,7 +376,7 @@ class MaxClient:
                 return
             except Exception as e:  # noqa: BLE001
                 self._debug(f"reconnect failed: {e}")
-                delay = min(delay * 2, 60.0)
+                delay = min(delay * 2, 60.0) + random.uniform(0.0, 3.0)
 
     # ───────────────────────── request / response ─────────────────────────
 
