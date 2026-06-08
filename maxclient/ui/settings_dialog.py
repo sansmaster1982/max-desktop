@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -54,14 +55,17 @@ class SettingsDialog(QDialog):
         head.addWidget(av)
         pcol = QVBoxLayout()
         pcol.setSpacing(2)
-        name = QLabel(prof.name or "Мой профиль")
-        name.setStyleSheet("font-size:17px; font-weight:700;")
-        pcol.addWidget(name)
+        self._name_label = QLabel(prof.name or "Мой профиль")
+        self._name_label.setStyleSheet("font-size:17px; font-weight:700;")
+        pcol.addWidget(self._name_label)
         sub = QLabel(prof.phone or (f"id {prof.id}" if prof.id else "—"))
         sub.setObjectName("ChatSubtitle")
         sub.setStyleSheet("color: palette(mid);")
         pcol.addWidget(sub)
         head.addLayout(pcol, 1)
+        edit_name = QPushButton("Изменить имя")
+        edit_name.clicked.connect(self._edit_name)
+        head.addWidget(edit_name, 0, Qt.AlignmentFlag.AlignVCenter)
         root.addLayout(head)
         root.addWidget(_divider())
 
@@ -174,6 +178,23 @@ class SettingsDialog(QDialog):
         self.settings.send_on_enter = value
         self.settings.save()
 
+    def _edit_name(self) -> None:
+        new_name, ok = QInputDialog.getText(
+            self, "Изменить имя", "Имя в MAX (видно собеседникам):",
+            text=self._name_label.text(),
+        )
+        if not ok or not new_name.strip():
+            return
+        run_async(
+            self.service.update_my_name, new_name.strip(),
+            on_done=self._on_name_changed,
+            on_error=lambda e: QMessageBox.warning(self, "Не удалось", str(e)),
+        )
+
+    def _on_name_changed(self, name: str) -> None:
+        self._name_label.setText(name)
+        QMessageBox.information(self, "Готово", "Имя профиля изменено.")
+
     def _show_sessions(self) -> None:
         run_async(
             self.service.list_sessions,
@@ -211,7 +232,7 @@ class SettingsDialog(QDialog):
             if hint:
                 parts.append(f"подсказка: {hint}")
             self.twofa_status.setText(" · ".join(parts))
-            self.twofa_btn.setText("Сменить пароль 2FA")
+            self.twofa_btn.setText("Сменить пароль 2FA (без текущего)")
             self.email_btn.setEnabled(True)
             self.email_btn.setText("Сменить recovery email" if email else "Привязать recovery email")
         else:
@@ -325,13 +346,14 @@ class _Swatch(QPushButton):
 
 
 class Change2FADialog(QDialog):
-    """Смена пароля 2FA: текущий -> новый -> подтверждение (+ необязательная подсказка)."""
+    """Смена пароля 2FA БЕЗ ввода текущего (сервисная модель MAX, by design):
+    новый -> подтверждение (+ подсказка). Работает только при уже включённом 2FA."""
 
     def __init__(self, service: MaxService, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.service = service
         self.setWindowTitle("Сменить пароль 2FA")
-        self.resize(380, 360)
+        self.resize(380, 340)
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(10)
@@ -340,10 +362,17 @@ class Change2FADialog(QDialog):
         title.setStyleSheet("font-size:16px; font-weight:700;")
         root.addWidget(title)
 
-        self.old = _pw_field("Текущий пароль 2FA")
+        info = QLabel(
+            "Текущий пароль не требуется. Не жмите повторно при ошибке — "
+            "серия попыток 2FA может временно ограничить аккаунт."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("ChatSubtitle")
+        info.setStyleSheet("color: palette(mid);")
+        root.addWidget(info)
+
         self.new = _pw_field("Новый пароль")
         self.confirm = _pw_field("Повторите новый пароль")
-        root.addWidget(self.old)
         root.addWidget(self.new)
         root.addWidget(self.confirm)
 
@@ -364,11 +393,10 @@ class Change2FADialog(QDialog):
         root.addWidget(self.btn)
 
     def _submit(self) -> None:
-        old = self.old.text()
         new = self.new.text()
         confirm = self.confirm.text()
-        if not old or not new:
-            self._err("Заполните текущий и новый пароль.")
+        if not new:
+            self._err("Введите новый пароль.")
             return
         if new != confirm:
             self._err("Новые пароли не совпадают.")
@@ -377,7 +405,7 @@ class Change2FADialog(QDialog):
         self.btn.setEnabled(False)
         self.btn.setText("…")
         run_async(
-            self.service.change_2fa, old, new, self.hint.text().strip() or None,
+            self.service.change_2fa, new, self.hint.text().strip() or None,
             on_done=lambda _r: self._ok(),
             on_error=self._fail,
         )
@@ -488,16 +516,15 @@ class Enable2FADialog(QDialog):
 
 
 class RecoveryEmailDialog(QDialog):
-    """Привязка/смена recovery email (нужен включённый 2FA). Двухшаговый поток:
-    1) текущий пароль 2FA + email -> VERIFY_EMAIL (код уходит на почту);
-    2) код из письма -> CHECK_EMAIL."""
+    """Привязка/смена recovery email БЕЗ ввода пароля 2FA (сервисная модель).
+    Двухшаговый поток: 1) email -> VERIFY_EMAIL (код на почту); 2) код -> CHECK_EMAIL."""
 
     def __init__(self, service: MaxService, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.service = service
         self._track_id: str | None = None
         self.setWindowTitle("Recovery email")
-        self.resize(380, 340)
+        self.resize(380, 320)
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(10)
@@ -506,11 +533,18 @@ class RecoveryEmailDialog(QDialog):
         title.setStyleSheet("font-size:16px; font-weight:700;")
         root.addWidget(title)
 
+        info = QLabel(
+            "Текущий пароль 2FA не требуется. На указанную почту придёт код "
+            "подтверждения."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("ChatSubtitle")
+        info.setStyleSheet("color: palette(mid);")
+        root.addWidget(info)
+
         # Шаг 1.
-        self.cur = _pw_field("Текущий пароль 2FA")
         self.email = QLineEdit()
         self.email.setPlaceholderText("Email (на него придёт код)")
-        root.addWidget(self.cur)
         root.addWidget(self.email)
         self.send_btn = QPushButton("Отправить код")
         self.send_btn.setObjectName("Primary")
@@ -542,14 +576,13 @@ class RecoveryEmailDialog(QDialog):
         self.send_btn.setEnabled(False)
         self.send_btn.setText("…")
         run_async(
-            self.service.start_set_recovery_email, self.cur.text(), self.email.text(),
+            self.service.start_set_recovery_email, self.email.text(),
             on_done=self._code_sent,
             on_error=self._send_fail,
         )
 
     def _code_sent(self, track_id: str) -> None:
         self._track_id = track_id
-        self.cur.setEnabled(False)
         self.email.setEnabled(False)
         self.send_btn.setText("Код отправлен")
         self.code.show()

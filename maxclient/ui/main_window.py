@@ -12,10 +12,12 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QInputDialog,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -111,6 +113,8 @@ class MainWindow(QMainWindow):
 
         self.chat_list = QListWidget()
         self.chat_list.itemClicked.connect(self._on_chat_clicked)
+        self.chat_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.chat_list.customContextMenuRequested.connect(self._chat_context_menu)
         sb.addWidget(self.chat_list, 1)
 
         splitter.addWidget(sidebar)
@@ -207,6 +211,30 @@ class MainWindow(QMainWindow):
             return
         self._current_chat_id = chat_id
         self.chat_view.open_chat(chat)
+
+    def _chat_context_menu(self, pos) -> None:
+        item = self.chat_list.itemAt(pos)
+        if item is None:
+            return
+        chat_id = item.data(Qt.ItemDataRole.UserRole)
+        menu = QMenu(self)
+        menu.addAction("Переименовать", lambda: self._rename_chat(chat_id))
+        menu.exec(self.chat_list.mapToGlobal(pos))
+
+    def _rename_chat(self, chat_id: int) -> None:
+        chat = self.service.store.get_chat(chat_id)
+        current = chat.title if chat else ""
+        new_name, ok = QInputDialog.getText(
+            self, "Переименовать", "Имя собеседника / чата:", text=current or ""
+        )
+        if not ok or not new_name.strip():
+            return
+        try:
+            self.service.rename_conversation(chat_id, new_name.strip())
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.warning(self, "Не удалось", str(e))
+            return
+        self._reload_chats()
 
     def _on_chat_touched(self, _chat_id: int) -> None:
         self._schedule_reload()
