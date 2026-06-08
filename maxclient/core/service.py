@@ -219,6 +219,23 @@ class MaxService:
             phone=self.session.phone,
         )
 
+    def update_my_name(self, name: str) -> str:
+        """Сменить своё имя профиля (видно другим): PROFILE(16) на запись.
+        Имя из одного поля кладём в firstName, остаток (после первого пробела) —
+        в lastName. Обновляет локальную сессию. Возвращает применённое имя."""
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Имя не может быть пустым")
+        parts = name.split(" ", 1)
+        first = parts[0]
+        # Имя из одного слова -> last="" (очищает прежнюю фамилию на сервере),
+        # иначе остаток. "" != None: пустая строка явно очищает (r2e.java).
+        last = parts[1].strip() if len(parts) > 1 else ""
+        self.client.update_profile_name(first, last)
+        self.session.my_name = name
+        self.session.save()
+        return name
+
     # ───────────────────────── chats ─────────────────────────
 
     def sync_chats(self) -> list[Chat]:
@@ -243,7 +260,9 @@ class MaxService:
         # Диалоги без имени titлуем по импортированным контактам (id чата = id контакта).
         contacts = self._contacts_map()
         for ch in chats:
-            if ch.id in contacts and (not ch.title or ch.title.startswith("Чат ")):
+            # title_locked — пользователь переименовал вручную, имя контакта не навязываем.
+            if (ch.id in contacts and not ch.title_locked
+                    and (not ch.title or ch.title.startswith("Чат "))):
                 ch.title = contacts[ch.id].display
         return chats
 
@@ -440,6 +459,39 @@ class MaxService:
         self.store.delete_contact(contact_id)
         self._invalidate_contacts()
 
+    def rename_contact(self, contact_id: int, new_name: str) -> Contact:
+        """Локально переименовать контакт (имя в нашем приложении). НЕ трогает
+        сервер — ноль риска для аккаунта. Имя применяется и к диалогу 1:1 в
+        списке чатов (id чата = id контакта)."""
+        new_name = (new_name or "").strip()
+        if not new_name:
+            raise ValueError("Имя не может быть пустым")
+        existing = self._contacts_map().get(contact_id)
+        phone = existing.phone if existing else None
+        contact = Contact(id=contact_id, name=new_name, phone=phone)
+        self.store.upsert_contact(contact)
+        # Принудительно обновляем заголовок диалога (1:1), чтобы имя сменилось
+        # сразу, не дожидаясь fallback-логики в list_chats.
+        self.store.rename_chat(contact_id, new_name)
+        self._invalidate_contacts()
+        return contact
+
+    def rename_chat(self, chat_id: int, title: str) -> None:
+        """Локально переименовать чат (групповой или диалог). Только наша БД."""
+        title = (title or "").strip()
+        if not title:
+            raise ValueError("Название не может быть пустым")
+        self.store.rename_chat(chat_id, title)
+
+    def rename_conversation(self, chat_id: int, name: str) -> None:
+        """Переименовать собеседника/чат из списка чатов. Если это известный
+        контакт (диалог 1:1, id чата = id контакта) — меняем контакт (и имя в
+        списке контактов); иначе — только локальный заголовок чата."""
+        if chat_id in self._contacts_map():
+            self.rename_contact(chat_id, name)
+        else:
+            self.rename_chat(chat_id, name)
+
     # ───────────────────────── sessions ─────────────────────────
 
     @staticmethod
@@ -492,56 +544,42 @@ class MaxService:
 
     def enable_2fa(self, password: str, hint: Optional[str] = None) -> None:
         """Включить 2FA, когда он выключен — только по токену, без старого пароля.
-        CREATE_TRACK(112) -> SET_2FA(111, expectedCapabilities:[1])."""
+        CREATE_TRACK(112) -> SET_2FA(111, expectedCapabilities:[0] = SET_PASSWORD)."""
         if not password:
             raise ValueError("Введите пароль 2FA")
         track_id = self.client.auth_create_track(0)
-        result = self.client.auth_set_2fa(track_id, password, hint)
+        # capability=0 (SET_PASSWORD) — включение с нуля. [1] (UPDATE_PASSWORD)
+        # сервер отвергает на выключенном 2FA (error password.is.off).
+        result = self.client.auth_set_2fa(track_id, password, hint, capability=0)
         if not result.ok:
             raise ValueError(result.error_text() or "Не удалось включить 2FA")
 
-    def change_2fa(self, old_password: str, new_password: str, hint: Optional[str] = None) -> None:
-        """Сменить пароль 2FA: CREATE_TRACK -> CHECK(old) -> SET(new).
-        Бросает ValueError с понятным текстом при ошибке."""
+    def change_2fa(self, new_password: str, hint: Optional[str] = None) -> None:
+        """Сменить пароль 2FA БЕЗ ввода текущего — сервисная модель MAX (как test5):
+        CREATE_TRACK -> SET_2FA(UPDATE_PASSWORD). На уже аутентифицированной сессии
+        сервер не требует старый пароль (вендор подтвердил: by design). Работает
+        только при УЖЕ включённом 2FA (иначе error password.is.off). ОДНА попытка,
+        без ретраев — серия 2FA-операций триггерит антифрод-ограничение."""
+        if not new_password:
+            raise ValueError("Введите новый пароль 2FA")
         track_id = self.client.auth_create_track(0)
-        check = self.client.auth_check_password(track_id, old_password)
-        if not check.ok:
-            raise ValueError("Неверный текущий пароль 2FA")
-        result = self.client.auth_set_2fa(track_id, new_password, hint)
+        result = self.client.auth_set_2fa(track_id, new_password, hint, capability=1)
         if not result.ok:
-            raise ValueError(result.error_text() or "Не удалось изменить пароль")
+            raise ValueError(result.error_text() or "Не удалось изменить пароль 2FA")
 
-    def start_set_recovery_email(self, current_password: str, email: str) -> str:
-        """Шаг 1 привязки/смены recovery-email (нужен включённый 2FA).
-        CREATE_TRACK -> CHECK_PASSWORD(текущий) -> VERIFY_EMAIL(109, шлёт код).
-
-        ИНФЕРЕНС: что 113 «авторизует» трек для 109 — APK прямо НЕ подтверждает
-        (поток скопирован с change_2fa, где 113 предшествует 111). enable_2fa
-        доказывает, что свежий трек работает и без 113. Поэтому если 109 падает
-        ПОСЛЕ успешной проверки пароля — пробуем 109 на свежем треке без 113
-        (на случай, если 113 не нужен или «съедает» трек). Возвращает trackId
-        для шага 2 (CHECK_EMAIL 110)."""
+    def start_set_recovery_email(self, email: str) -> str:
+        """Шаг 1 смены recovery email БЕЗ ввода пароля 2FA — сервисная модель
+        (как test5): CREATE_TRACK -> VERIFY_EMAIL(109) шлёт код на email.
+        Возвращает trackId для шага 2 (CHECK_EMAIL 110). Одна попытка."""
         email = (email or "").strip()
         if "@" not in email or "." not in email:
             raise ValueError("Введите корректный email")
         track_id = self.client.auth_create_track(0)
-        check = self.client.auth_check_password(track_id, current_password)
-        if not check.ok:
-            self.log(f"recovery-email: CHECK_PASSWORD non-OK cmd={check.cmd}")
-            raise ValueError(check.error_text() or "Неверный текущий пароль 2FA")
         res = self.client.auth_verify_email(track_id, email)
-        if res.ok:
-            return track_id
-        # 109 отвергнут после успешной проверки пароля — фолбэк: свежий трек без 113.
-        self.log(f"recovery-email: VERIFY_EMAIL non-OK cmd={res.cmd}; retry on fresh track")
-        track2 = self.client.auth_create_track(0)
-        res2 = self.client.auth_verify_email(track2, email)
-        if res2.ok:
-            return track2
-        self.log(f"recovery-email: VERIFY_EMAIL retry non-OK cmd={res2.cmd}")
-        raise ValueError(
-            res2.error_text() or res.error_text() or "Не удалось отправить код на email"
-        )
+        if not res.ok:
+            self.log(f"recovery-email: VERIFY_EMAIL non-OK cmd={res.cmd}")
+            raise ValueError(res.error_text() or "Не удалось отправить код на email")
+        return track_id
 
     def confirm_recovery_email(self, track_id: str, code: str) -> None:
         """Шаг 2: подтвердить код из письма (CHECK_EMAIL 110)."""

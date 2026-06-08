@@ -53,6 +53,7 @@ class Chat:
     last_preview: Optional[str] = None
     unread: int = 0
     avatar_url: Optional[str] = None
+    title_locked: bool = False  # локальное переименование — sync не затирает
 
     @property
     def display(self) -> str:
