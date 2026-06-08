@@ -260,10 +260,22 @@ class MaxService:
         # Диалоги без имени titлуем по импортированным контактам (id чата = id контакта).
         contacts = self._contacts_map()
         for ch in chats:
-            # title_locked — пользователь переименовал вручную, имя контакта не навязываем.
-            if (ch.id in contacts and not ch.title_locked
-                    and (not ch.title or ch.title.startswith("Чат "))):
-                ch.title = contacts[ch.id].display
+            # Прайм клиента peer'ами диалогов: отправка пойдёт сразу по userId.
+            if ch.peer_user_id:
+                self.client.set_peer(ch.id, ch.peer_user_id)
+            # title_locked — пользователь переименовал вручную, не навязываем.
+            if ch.title_locked:
+                continue
+            if not ch.title or ch.title.startswith("Чат "):
+                # 1:1: имя по контакту. У диалога ch.id — это chatId (НЕ user id),
+                # поэтому ищем контакт по peer_user_id; для совместимости — и по id.
+                name = None
+                if ch.peer_user_id and ch.peer_user_id in contacts:
+                    name = contacts[ch.peer_user_id].display
+                elif not ch.is_group and ch.id in contacts:
+                    name = contacts[ch.id].display
+                if name:
+                    ch.title = name
         return chats
 
     def open_chat(self, chat_id: int, count: int = 50, force: bool = False) -> list[Message]:
@@ -306,6 +318,21 @@ class MaxService:
 
     # ───────────────────────── send ─────────────────────────
 
+    def _prime_peer(self, chat_id: int) -> bool:
+        """Подсказать клиенту peer диалога из БД (чтобы первая отправка шла сразу
+        по userId, без неудачной попытки по chatId) и вернуть is_group — в группу
+        диалоговый фолбэк по userId делать НЕЛЬЗЯ (ушло бы постороннему)."""
+        ch = self.store.get_chat(chat_id)
+        if ch and ch.peer_user_id:
+            self.client.set_peer(chat_id, ch.peer_user_id)
+        return bool(ch and ch.is_group)
+
+    def _persist_peer(self, chat_id: int) -> None:
+        """Сохранить peer, который клиент выяснил из ошибки сервера (1:1 диалог)."""
+        peer = self.client.peer_for(chat_id)
+        if peer:
+            self.store.set_chat_peer(chat_id, peer)
+
     def send_text(self, chat_id: int, text: str) -> Message:
         local_id = str(uuid.uuid4())
         pending = Message(
@@ -316,7 +343,9 @@ class MaxService:
         self.store.insert_message(pending)
         self.store.update_chat_preview(chat_id, pending.time_ms, text)
         try:
-            res = self.client.send_message(chat_id, text)
+            is_group = self._prime_peer(chat_id)
+            res = self.client.send_message(chat_id, text, allow_dialog_fallback=not is_group)
+            self._persist_peer(chat_id)
             server_id = _extract_sent_id(res)
             self.store.update_message_by_local_id(local_id, server_id=server_id, status="sent")
             pending.id = server_id
@@ -350,7 +379,11 @@ class MaxService:
             attach = upload_and_build_attach(
                 self.client, path, kind, duration_ms=duration_ms, on_progress=on_progress
             )
-            res = self.client.send_message(chat_id, text, attaches=[attach])
+            is_group = self._prime_peer(chat_id)
+            res = self.client.send_message(
+                chat_id, text, attaches=[attach], allow_dialog_fallback=not is_group
+            )
+            self._persist_peer(chat_id)
             server_id = _extract_sent_id(res)
             self.store.update_message_by_local_id(local_id, server_id=server_id, status="sent")
             pending.id = server_id
@@ -422,6 +455,9 @@ class MaxService:
         contact = Contact(id=cid, name=display, phone=data.get("phone") or phone)
         self.store.upsert_contact(contact)
         self.store.ensure_chat(cid, display)
+        # Диалог с контактом адресуется по userId (= cid). Сразу запоминаем peer,
+        # чтобы первая отправка шла по userId, без неудачной попытки по chatId.
+        self.store.set_chat_peer(cid, cid)
         self._invalidate_contacts()
         return contact
 
@@ -447,6 +483,8 @@ class MaxService:
                         )
                         # Чтобы диалог в списке чатов показывал имя контакта.
                         self.store.ensure_chat(cid, display)
+                        # Диалог адресуется по userId (= cid) — запоминаем peer.
+                        self.store.set_chat_peer(cid, cid)
                         found += 1
                 except Exception:
                     pass
@@ -484,10 +522,17 @@ class MaxService:
         self.store.rename_chat(chat_id, title)
 
     def rename_conversation(self, chat_id: int, name: str) -> None:
-        """Переименовать собеседника/чат из списка чатов. Если это известный
-        контакт (диалог 1:1, id чата = id контакта) — меняем контакт (и имя в
-        списке контактов); иначе — только локальный заголовок чата."""
-        if chat_id in self._contacts_map():
+        """Переименовать собеседника/чат из списка чатов. Для диалога с известным
+        контактом меняем сам контакт (и имя в списке контактов); иначе — локальный
+        заголовок чата. Диалог распознаём по peer_user_id (у серверного диалога
+        chatId != id контакта), затем по самому chat_id (диалог открыт из контактов)."""
+        ch = self.store.get_chat(chat_id)
+        contacts = self._contacts_map()
+        peer = ch.peer_user_id if ch else None
+        if peer and peer in contacts:
+            self.rename_contact(peer, name)
+            self.store.rename_chat(chat_id, name)
+        elif chat_id in contacts:
             self.rename_contact(chat_id, name)
         else:
             self.rename_chat(chat_id, name)

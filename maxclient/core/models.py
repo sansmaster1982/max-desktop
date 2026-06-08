@@ -54,6 +54,7 @@ class Chat:
     unread: int = 0
     avatar_url: Optional[str] = None
     title_locked: bool = False  # локальное переименование — sync не затирает
+    peer_user_id: Optional[int] = None  # для 1:1 диалога — id собеседника
 
     @property
     def display(self) -> str:
