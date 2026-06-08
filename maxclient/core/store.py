@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS chats (
     last_preview  TEXT,
     unread        INTEGER DEFAULT 0,
     avatar_url    TEXT,
-    title_locked  INTEGER DEFAULT 0
+    title_locked  INTEGER DEFAULT 0,
+    peer_user_id  INTEGER
 );
 CREATE TABLE IF NOT EXISTS contacts (
     id     INTEGER PRIMARY KEY,
@@ -78,6 +79,11 @@ class Store:
                 self._db.execute(
                     "ALTER TABLE chats ADD COLUMN title_locked INTEGER DEFAULT 0"
                 )
+                self._db.commit()
+            # peer_user_id: для 1:1 диалога — id собеседника (SEND_MESSAGE по
+            # userId, не chatId). Узнаётся из ошибки сервера и кэшируется.
+            if "peer_user_id" not in cols:
+                self._db.execute("ALTER TABLE chats ADD COLUMN peer_user_id INTEGER")
                 self._db.commit()
 
     def close(self) -> None:
@@ -154,6 +160,20 @@ class Store:
             self._db.execute("UPDATE chats SET unread=0 WHERE id=?", (chat_id,))
             self._db.commit()
 
+    def set_chat_peer(self, chat_id: int, peer_user_id: int) -> None:
+        """Запомнить peer userId диалога (1:1). Используется для отправки по
+        userId и для подстановки имени собеседника из контактов."""
+        if not peer_user_id:
+            return
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO chats(id, peer_user_id) VALUES(?,?) "
+                "ON CONFLICT(id) DO UPDATE SET peer_user_id=excluded.peer_user_id",
+                (chat_id, peer_user_id),
+            )
+            self._db.commit()
+
+
     @staticmethod
     def _row_to_chat(r: sqlite3.Row) -> Chat:
         keys = r.keys()
@@ -162,6 +182,7 @@ class Store:
             last_time_ms=r["last_time_ms"], last_preview=r["last_preview"],
             unread=r["unread"] or 0, avatar_url=r["avatar_url"],
             title_locked=bool(r["title_locked"]) if "title_locked" in keys else False,
+            peer_user_id=r["peer_user_id"] if "peer_user_id" in keys else None,
         )
 
     # ───────────────────────── contacts ─────────────────────────
