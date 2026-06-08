@@ -35,6 +35,9 @@ PORT = 443
 PROTO_VER = 10
 DEFAULT_APP_VERSION = "26.15.0"
 DEFAULT_LOCALE = "ru"
+# versionCode официального APK, согласован с DEFAULT_APP_VERSION (26.15.0 → 6689).
+# Идёт в userAgent.buildNumber для ANDROID-INIT (см. _build_user_agent).
+APP_BUILD = 6689
 
 # Чувствительные ключи маскируются в логах.
 _SECRET_KEYS = {"token", "password", "oldpassword", "newpassword", "trackid"}
@@ -112,13 +115,28 @@ class MaxClient:
 
         self._reconnect_thread: Optional[threading.Thread] = None
         self._reconnect_running = False
+        self._reconnect_stop: Optional[threading.Event] = None
 
         # Keepalive: держим сокет живым PING'ом, чтобы сервер не дропал по
         # простою (иначе reconnect-шторм -> бан номера антифродом).
         self._keepalive_thread: Optional[threading.Thread] = None
         self._keepalive_stop: Optional[threading.Event] = None
 
-    KEEPALIVE_INTERVAL = 20.0  # сек; окно сервера 11..61 c, шлём с запасом
+        # Анти-шторм (порт ReconnectPolicy из max iso). Главный инвариант: не
+        # делать LOGIN (op19) чаще, чем раз в MIN_AUTH_INTERVAL. _last_login_ts —
+        # монотонное время последнего успешного LOGIN; НЕ сбрасывается при дропе
+        # (считаем время с АВТОРИЗАЦИИ, а не с разрыва). _reconnect_ok_ts —
+        # времена успешных реконнектов для предохранителя флаппинга.
+        self._last_login_ts: Optional[float] = None
+        self._reconnect_ok_ts: list[float] = []
+
+    KEEPALIVE_INTERVAL = 20.0   # сек; окно сервера 11..61 c, шлём с запасом
+    RECONNECT_BASE = 5.0        # база экспоненциального backoff
+    RECONNECT_MAX = 60.0        # потолок backoff
+    MIN_AUTH_INTERVAL = 30.0    # не логиниться чаще раза в 30 c (главный анти-бан)
+    BREAKER_WINDOW = 300.0      # окно подсчёта успешных реконнектов (5 мин)
+    BREAKER_MAX_OK = 6          # столько реконнектов за окно = флаппинг
+    BREAKER_COOLDOWN = 480.0    # длинная пауза при флаппинге (8 мин)
 
     # ───────────────────────── state / lifecycle ─────────────────────────
 
@@ -350,6 +368,7 @@ class MaxClient:
         if self._reconnect_running:
             return
         self._reconnect_running = True
+        self._reconnect_stop = threading.Event()
         self._reconnect_thread = threading.Thread(
             target=self._reconnect_loop, name="max-reconnect", daemon=True
         )
@@ -357,26 +376,88 @@ class MaxClient:
 
     def _stop_reconnect(self) -> None:
         self._reconnect_running = False
+        ev = self._reconnect_stop
+        if ev is not None:
+            ev.set()  # будит спящий реконнект сразу (важно для close())
+
+    def _since_last_login(self) -> float:
+        """Секунд с последнего успешного LOGIN. Очень большое число, если в этой
+        сессии ещё не логинились — тогда первый реконнект не тормозим."""
+        if self._last_login_ts is None:
+            return 1e9
+        return time.monotonic() - self._last_login_ts
+
+    def _auth_throttle(self) -> float:
+        """Сколько ещё ждать, чтобы соблюсти MIN_AUTH_INTERVAL между LOGIN.
+        Это и отличает честный дроп после долгой стабильной сессии (логинились
+        давно → 0) от шторма (логинились только что → ждём остаток интервала)."""
+        since = self._since_last_login()
+        if since >= self.MIN_AUTH_INTERVAL:
+            return 0.0
+        return self.MIN_AUTH_INTERVAL - since
+
+    def _prune_breaker_window(self) -> None:
+        cutoff = time.monotonic() - self.BREAKER_WINDOW
+        self._reconnect_ok_ts = [t for t in self._reconnect_ok_ts if t >= cutoff]
+
+    def _reconnect_delay(self, attempt: int) -> float:
+        """Итоговая пауза перед попыткой: max(backoff, auth-throttle,
+        cooldown-при-флаппинге) + джиттер. Порт ReconnectPolicy.nextDelay из
+        max iso. throttle и cooldown НЕ ограничены RECONNECT_MAX — это
+        намеренно более длинные паузы (потолок частоты LOGIN и анти-флаппинг)."""
+        a = max(0, min(attempt, 16))
+        delay = min(self.RECONNECT_BASE * float(1 << a), self.RECONNECT_MAX)
+        throttle = self._auth_throttle()
+        if throttle > delay:
+            delay = throttle
+        self._prune_breaker_window()
+        if len(self._reconnect_ok_ts) >= self.BREAKER_MAX_OK and self.BREAKER_COOLDOWN > delay:
+            delay = self.BREAKER_COOLDOWN
+            self._debug(
+                f"reconnect breaker: {len(self._reconnect_ok_ts)} re-auth за "
+                f"{self.BREAKER_WINDOW:.0f}s → cooldown {self.BREAKER_COOLDOWN:.0f}s"
+            )
+        return delay + random.uniform(0.0, self.RECONNECT_BASE / 2.0)
 
     def _reconnect_loop(self) -> None:
-        # База 5с + джиттер вместо 2с: даже при редком реальном разрыве не частим
-        # с re-login (это сигнал шторма для антифрода). С keepalive дропы редки.
-        base = 5.0
-        delay = base + random.uniform(0.0, 3.0)
+        ev = self._reconnect_stop
+        if ev is None:
+            return
+        attempt = 0
         while self._reconnect_running and not self._closed:
-            time.sleep(delay)
+            delay = self._reconnect_delay(attempt)
+            self._debug(
+                f"reconnect через {delay:.1f}s (попытка {attempt}, "
+                f"успехов в окне {len(self._reconnect_ok_ts)}, "
+                f"с LOGIN {self._since_last_login():.0f}s)"
+            )
+            if ev.wait(delay):
+                return  # запрошен стоп (close) — выходим без попытки
             if self._closed or not self._reconnect_running:
-                break
+                return
             try:
                 self.connect(device_type=self._device_type)
                 if self._token:
                     self.login(self._token)
+                # Предохранитель считает только УСПЕШНЫЕ реконнекты: риск бана —
+                # частота re-auth, а не неудачные коннекты к лежащему серверу
+                # (иначе при оборванной сети 6 неудач = 8 мин офлайна без причины).
+                self._reconnect_ok_ts.append(time.monotonic())
                 self._debug("reconnect succeeded")
                 self._reconnect_running = False
                 return
+            except MaxLoginFailed as e:
+                # Токен мёртв — нет смысла долбить сервер протухшим токеном.
+                # Останавливаем цикл, чистим токен, уходим в DISCONNECTED
+                # (UI по пустому token покажет экран входа).
+                self._debug(f"reconnect aborted (token invalid): {e}")
+                self._token = None
+                self._reconnect_running = False
+                self._set_state(ConnectionState.DISCONNECTED)
+                return
             except Exception as e:  # noqa: BLE001
                 self._debug(f"reconnect failed: {e}")
-                delay = min(delay * 2, 60.0) + random.uniform(0.0, 3.0)
+                attempt += 1
 
     # ───────────────────────── request / response ─────────────────────────
 
@@ -436,16 +517,55 @@ class MaxClient:
         f = self.request(
             opcodes.INIT,
             {
-                "userAgent": {
-                    "deviceType": self._device_type,
-                    "locale": self.locale,
-                    "appVersion": self.app_version,
-                },
+                "userAgent": self._build_user_agent(),
                 "deviceId": self.device_id,
             },
         )
         if not f.ok:
             raise MaxError(f"INIT failed cmd={f.cmd}")
+
+    def _build_user_agent(self) -> dict:
+        """userAgent для INIT (op6).
+
+        Для ANDROID — полный правдоподобный набор из 11 полей в строгом порядке
+        официального клиента (pushDeviceType обязан идти ВТОРЫМ; порт
+        DeviceProfile из max iso). Урезанный UA из трёх полей сам по себе выдаёт
+        сторонний клиент антифроду — это дешёвый сигнал, его и убираем. Сервер
+        MAX не проверяет TLS/JA3, поэтому самосогласованный UA безопасен.
+
+        Для WEB и прочего — минимум: вход по веб-токену уже работает, а
+        официальный WEB-UA не реверснут, ломать рабочий путь смысла нет.
+
+        Порядок ключей важен: msgpack сериализует dict в порядке вставки.
+        """
+        if self._device_type == "ANDROID":
+            ua: dict[str, Any] = {
+                "deviceType": "ANDROID",
+                "pushDeviceType": "GCM",
+                "appVersion": self.app_version,
+                "arch": "arm64-v8a",
+            }
+            # buildNumber согласован только с дефолтной версией (26.15.0 → 6689).
+            # Если app_version переопределили в настройках — не шлём рассинхрон
+            # версии и билда (это был бы новый сигнал «не родной клиент»).
+            if self.app_version == DEFAULT_APP_VERSION:
+                ua["buildNumber"] = APP_BUILD
+            ua.update(
+                {
+                    "osVersion": "34",
+                    "locale": self.locale,
+                    "deviceLocale": "ru_RU",
+                    "deviceName": "Android",
+                    "screen": "1080x2340",
+                    "timezone": _iana_timezone(),
+                }
+            )
+            return ua
+        return {
+            "deviceType": self._device_type,
+            "locale": self.locale,
+            "appVersion": self.app_version,
+        }
 
     def start_auth_sms(self, phone: str) -> str:
         """Запросить SMS. Возвращает verify-token для confirm_sms."""
@@ -510,6 +630,9 @@ class MaxClient:
         if not f.ok:
             raise MaxLoginFailed(f"LOGIN: {f.error_text()}")
         self._token = token
+        # Метка для анти-шторм-троттла: следующий реконнект не будет логиниться
+        # раньше, чем через MIN_AUTH_INTERVAL после этого момента.
+        self._last_login_ts = time.monotonic()
         return f
 
     def logout(self) -> MaxFrame:
@@ -769,6 +892,32 @@ def _doh_resolve(host: str) -> Optional[str]:
         except Exception:
             continue
     return None
+
+
+def _iana_timezone() -> str:
+    """Best-effort IANA-таймзона по смещению UTC. Сервер таймзону жёстко не
+    валидирует (у реальных клиентов она разная); важна правдоподобность.
+    Порт DeviceProfile._ianaTimezone из max iso."""
+    try:
+        from datetime import datetime, timezone
+
+        off = datetime.now(timezone.utc).astimezone().utcoffset()
+        hours = int(off.total_seconds() // 3600) if off is not None else 3
+    except Exception:
+        hours = 3
+    return {
+        2: "Europe/Kaliningrad",
+        3: "Europe/Moscow",
+        4: "Asia/Tbilisi",
+        5: "Asia/Yekaterinburg",
+        6: "Asia/Omsk",
+        7: "Asia/Krasnoyarsk",
+        8: "Asia/Irkutsk",
+        9: "Asia/Yakutsk",
+        10: "Asia/Vladivostok",
+        11: "Asia/Magadan",
+        12: "Asia/Kamchatka",
+    }.get(hours, "Europe/Moscow")
 
 
 def _str_keys(d: Any) -> dict:
