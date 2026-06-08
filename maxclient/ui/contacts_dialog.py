@@ -107,8 +107,22 @@ class ContactsDialog(QDialog):
         c: Contact = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         menu.addAction("Открыть чат", lambda: self._on_click(item))
+        menu.addAction("Переименовать", lambda: self._rename(c))
         menu.addAction("Удалить", lambda: self._delete(c))
         menu.exec(self.list.mapToGlobal(pos))
+
+    def _rename(self, c: Contact) -> None:
+        new_name, ok = QInputDialog.getText(
+            self, "Переименовать контакт", "Имя:", text=c.display
+        )
+        if not ok or not new_name.strip():
+            return
+        try:
+            self.service.rename_contact(c.id, new_name.strip())
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.warning(self, "Не удалось", str(e))
+            return
+        self._refresh()
 
     def _delete(self, c: Contact) -> None:
         self.service.delete_contact(c.id)

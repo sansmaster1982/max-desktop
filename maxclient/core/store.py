@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS chats (
     last_time_ms  INTEGER,
     last_preview  TEXT,
     unread        INTEGER DEFAULT 0,
-    avatar_url    TEXT
+    avatar_url    TEXT,
+    title_locked  INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS contacts (
     id     INTEGER PRIMARY KEY,
@@ -70,6 +71,14 @@ class Store:
                 self._db.execute("UPDATE chats SET last_preview=NULL")
                 self._db.execute(f"PRAGMA user_version={self._CACHE_VERSION}")
                 self._db.commit()
+            # Аддитивная колонка title_locked: локальное переименование чата
+            # не должно затираться серверным sync (upsert_chat). Старые БД — ALTER.
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(chats)")}
+            if "title_locked" not in cols:
+                self._db.execute(
+                    "ALTER TABLE chats ADD COLUMN title_locked INTEGER DEFAULT 0"
+                )
+                self._db.commit()
 
     def close(self) -> None:
         with self._lock:
@@ -83,7 +92,8 @@ class Store:
                 """INSERT INTO chats(id, title, is_group, last_time_ms, last_preview, unread, avatar_url)
                    VALUES(?,?,?,?,?,?,?)
                    ON CONFLICT(id) DO UPDATE SET
-                     title=COALESCE(excluded.title, chats.title),
+                     title=CASE WHEN chats.title_locked=1 THEN chats.title
+                                ELSE COALESCE(excluded.title, chats.title) END,
                      is_group=excluded.is_group,
                      avatar_url=COALESCE(excluded.avatar_url, chats.avatar_url)""",
                 (
@@ -103,6 +113,17 @@ class Store:
                 )
             elif title and not row["title"]:
                 self._db.execute("UPDATE chats SET title=? WHERE id=?", (title, chat_id))
+            self._db.commit()
+
+    def rename_chat(self, chat_id: int, title: str) -> None:
+        """Локальное переименование: ПЕРЕЗАПИСЫВАЕТ заголовок (в отличие от
+        ensure_chat, который ставит имя только если его ещё не было)."""
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO chats(id, title, title_locked) VALUES(?,?,1) "
+                "ON CONFLICT(id) DO UPDATE SET title=excluded.title, title_locked=1",
+                (chat_id, title),
+            )
             self._db.commit()
 
     def list_chats(self) -> list[Chat]:
@@ -135,10 +156,12 @@ class Store:
 
     @staticmethod
     def _row_to_chat(r: sqlite3.Row) -> Chat:
+        keys = r.keys()
         return Chat(
             id=r["id"], title=r["title"], is_group=bool(r["is_group"]),
             last_time_ms=r["last_time_ms"], last_preview=r["last_preview"],
             unread=r["unread"] or 0, avatar_url=r["avatar_url"],
+            title_locked=bool(r["title_locked"]) if "title_locked" in keys else False,
         )
 
     # ───────────────────────── contacts ─────────────────────────

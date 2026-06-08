@@ -797,6 +797,24 @@ class MaxClient:
             "name": rp.read_str_after_key(f.body, b"\xa4name"),
         }
 
+    def update_profile_name(self, first_name: str, last_name: Optional[str] = None) -> dict:
+        """Сменить своё имя профиля (видно другим). PROFILE(16) на запись:
+        {requestId, firstName, lastName?} — порт updateProfileName из max iso
+        (defpackage r2e.java Tasks.Profile). Опкод тот же, что на чтение."""
+        payload: dict[str, Any] = {
+            "requestId": int(time.time() * 1000),
+            "firstName": first_name.strip(),
+        }
+        # last_name=None -> ключ опускаем (сервер сохраняет старую фамилию);
+        # last_name="" -> шлём пустую строку (очищает фамилию). Семантика
+        # подтверждена декомпилом r2e.java: omit=preserve, ""=clear.
+        if last_name is not None:
+            payload["lastName"] = last_name.strip()
+        f = self.request(opcodes.PROFILE, payload)
+        if not f.ok:
+            raise MaxError(f"PROFILE update: {f.error_text()}")
+        return _str_keys(f.decoded) if isinstance(f.decoded, dict) else {}
+
     def send_message(
         self,
         chat_id: int,
@@ -992,12 +1010,21 @@ class MaxClient:
         )
 
     def auth_set_2fa(
-        self, track_id: str, new_password: str, hint: Optional[str] = None
+        self,
+        track_id: str,
+        new_password: str,
+        hint: Optional[str] = None,
+        *,
+        capability: int = 1,
     ) -> MaxFrame:
+        # capability (lti enum, декомпил): 0=SET_PASSWORD (включить 2FA с нуля),
+        # 1=UPDATE_PASSWORD (сменить включённый), 2=RESTORE_PASSWORD (сброс по
+        # email). Сервер РАЗЛИЧАЕТ их: SET_2FA с [1] на ВЫКЛЮЧЕННОМ 2FA → ошибка
+        # password.is.off «2fa is not enabled» (проверено вживую 2026-06-08).
         payload: dict[str, Any] = {
             "trackId": track_id,
             "password": new_password,
-            "expectedCapabilities": [1],
+            "expectedCapabilities": [capability],
         }
         if hint:
             payload["hint"] = hint
