@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QVBoxLayout,
@@ -41,6 +42,7 @@ class MainWindow(QMainWindow):
 
     theme_changed = Signal()
     logged_out = Signal()
+    sig_auth_invalid = Signal()  # сервер отверг токен -> на экран входа
 
     def __init__(self, service: MaxService, settings: Settings) -> None:
         super().__init__()
@@ -129,9 +131,11 @@ class MainWindow(QMainWindow):
         self.service.on_message = self.sig_message.emit
         self.service.on_chat_changed = self.sig_chat_changed.emit
         self.service.on_state_changed = self.sig_state.emit
+        self.service.on_auth_invalid = self.sig_auth_invalid.emit
         self.sig_message.connect(self._on_message)
         self.sig_chat_changed.connect(lambda _cid: self._schedule_reload())
         self.sig_state.connect(self._on_state)
+        self.sig_auth_invalid.connect(self._on_auth_invalid)
 
     def _on_message(self, msg: Message) -> None:
         self.chat_view.on_incoming(msg)
@@ -147,6 +151,17 @@ class MainWindow(QMainWindow):
         color, tip = colors.get(state, ("#8A93A6", ""))
         self.state_dot.setStyleSheet(f"color:{color}; font-size:11px;")
         self.state_dot.setToolTip(tip)
+
+    def _on_auth_invalid(self) -> None:
+        """Сервер отверг сохранённый токен. Сессия уже очищена сервисом —
+        сообщаем и уводим на экран входа, а не виснем в «не в сети»."""
+        QMessageBox.information(
+            self,
+            "Сессия завершена",
+            "Токен больше не действителен (истёк или сессия закрыта). "
+            "Войдите снова.",
+        )
+        self.logged_out.emit()
 
     # ───────────────────────── chat list ─────────────────────────
 
