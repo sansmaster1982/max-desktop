@@ -42,12 +42,16 @@ class MaxService:
             on_push=self._on_push,
             on_state=self._on_state,
             on_debug=self._log_debug,
+            on_auth_invalid=self._on_auth_invalid,
             auto_reconnect=True,
         )
         # Колбэки в UI (устанавливаются снаружи).
         self.on_message: Optional[Callable[[Message], None]] = None
         self.on_chat_changed: Optional[Callable[[int], None]] = None
         self.on_state_changed: Optional[Callable[[ConnectionState], None]] = None
+        # Сервер отверг сохранённый токен (протух/отозван) — UI должен уйти на
+        # экран входа. Колбэк зовётся из reconnect-потока, UI оборачивает в сигнал.
+        self.on_auth_invalid: Optional[Callable[[], None]] = None
 
         # Дедуп push: ограниченный набор (set + deque на вытеснение).
         self._processed_ids: set[int] = set()
@@ -565,6 +569,16 @@ class MaxService:
     def _on_state(self, state: ConnectionState) -> None:
         if self.on_state_changed:
             self.on_state_changed(state)
+
+    def _on_auth_invalid(self) -> None:
+        """Токен на сервере мёртв (reconnect получил FAIL по LOGIN): чистим
+        локальный токен и сигналим UI уйти на экран входа."""
+        try:
+            self.session.clear_token()
+        except Exception:
+            pass
+        if self.on_auth_invalid:
+            self.on_auth_invalid()
 
     def shutdown(self) -> None:
         try:

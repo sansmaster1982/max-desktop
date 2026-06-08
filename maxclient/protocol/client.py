@@ -91,6 +91,7 @@ class MaxClient:
         on_push: Optional[Callable[[MaxFrame], None]] = None,
         on_state: Optional[Callable[[ConnectionState], None]] = None,
         on_debug: Optional[Callable[[str], None]] = None,
+        on_auth_invalid: Optional[Callable[[], None]] = None,
         auto_reconnect: bool = True,
     ) -> None:
         self.app_version = app_version
@@ -99,6 +100,10 @@ class MaxClient:
         self.on_push = on_push
         self.on_state = on_state
         self.on_debug = on_debug
+        # Вызывается из reconnect-потока, когда сервер отверг сохранённый токен
+        # (мёртвый/протухший): UI должен разлогинить и показать экран входа, а
+        # не висеть в «не в сети». Порт onAuthInvalid из max iso.
+        self.on_auth_invalid = on_auth_invalid
         self.auto_reconnect = auto_reconnect
 
         self._sock: Optional[ssl.SSLSocket] = None
@@ -116,6 +121,11 @@ class MaxClient:
         self._reconnect_thread: Optional[threading.Thread] = None
         self._reconnect_running = False
         self._reconnect_stop: Optional[threading.Event] = None
+        # Сериализует жизненный цикл реконнекта (старт/стоп/успех-коммит и
+        # решение «пришёл дроп» в reader-потоке). В Dart-reference это один
+        # event-loop; в Python reader/reconnect/UI — разные потоки, поэтому
+        # нужен общий замок. RLock — _handle_drop под локом зовёт _start_reconnect.
+        self._reconnect_lock = threading.RLock()
 
         # Keepalive: держим сокет живым PING'ом, чтобы сервер не дропал по
         # простою (иначе reconnect-шторм -> бан номера антифродом).
@@ -169,15 +179,43 @@ class MaxClient:
             except Exception:
                 pass
 
-    def connect(self, device_type: str = "ANDROID", timeout: float = 15.0) -> None:
-        """Открыть TLS, запустить читающий поток и выполнить INIT-хендшейк."""
+    def connect(
+        self,
+        device_type: str = "ANDROID",
+        timeout: float = 15.0,
+        *,
+        reset_closed: bool = True,
+    ) -> None:
+        """Открыть TLS, запустить читающий поток и выполнить INIT-хендшейк.
+
+        reset_closed=True — пользовательский вход: сбрасывает флаг «закрыто
+        навсегда» и гасит фоновый реконнект, чтобы тот не сделал параллельный
+        второй connect+LOGIN (двойная сессия с одним токеном = сигнал угона).
+        Авто-реконнект зовёт connect(reset_closed=False): НЕ трогает _closed
+        (иначе воскресил бы сессию, которую пользователь явно закрыл) и
+        прерывается, если попытку успели отменить. Порт reconnect() из max iso,
+        где auto-путь не трогает _closed.
+        """
         self._device_type = device_type
-        self._closed = False
+        if reset_closed:
+            # Пользовательский connect: стопаем возможный фоновый реконнект ДО
+            # любого I/O, иначе его поток мог бы параллельно сделать второй
+            # connect+LOGIN на том же токене.
+            self._stop_reconnect()
+            self._closed = False
+        else:
+            # auto-путь: если пока мы выходили из ожидания, пользователь
+            # закрыл/перелогинился — отменяем попытку до I/O, чтобы не порвать
+            # свежий пользовательский сокет и не сделать лишний LOGIN.
+            with self._reconnect_lock:
+                if self._closed or not self._reconnect_running:
+                    raise MaxNotConnected("reconnect cancelled")
         # Не плодим параллельные соединения: одно устройство — одна сессия
         # (несколько живых сокетов с одним токеном = сигнал угона для антифрода).
         if self._sock is not None:
             self._teardown_socket()
         self._set_state(ConnectionState.CONNECTING)
+        tls = None
         try:
             ctx = ssl.create_default_context()
             raw = self._open_raw_socket(timeout)
@@ -198,8 +236,14 @@ class MaxClient:
             self._set_state(ConnectionState.CONNECTED)
             self._start_keepalive()
         except Exception:
-            self._teardown_socket()
-            self._set_state(ConnectionState.DISCONNECTED)
+            # Рвём ТОЛЬКО наш сокет: если пока мы висели в сетевом I/O
+            # пользовательский connect() уже поставил свой self._sock (барьер
+            # join мог истечь раньше нашего таймаута), его не трогаем — иначе
+            # убили бы живую сессию. tls=None → свой сокет не публиковали.
+            if tls is not None:
+                self._teardown_socket(only=tls)
+            if not self.is_connected:
+                self._set_state(ConnectionState.DISCONNECTED)
             raise
 
     def _open_raw_socket(self, timeout: float) -> socket.socket:
@@ -222,11 +266,20 @@ class MaxClient:
     def close(self) -> None:
         """Явное закрытие пользователем — блокирует авто-реконнект."""
         self._closed = True
-        self._stop_reconnect()
+        # join_timeout=0: при выходе из приложения не подвисаем на догорающем
+        # реконнекте (поток daemon — всё равно умрёт). Корректность держат флаг
+        # _closed (его видят re-check'и в цикле) + сверка сокета в _handle_drop.
+        self._stop_reconnect(join_timeout=0.0)
         self._teardown_socket()
         self._set_state(ConnectionState.DISCONNECTED)
 
-    def _teardown_socket(self) -> None:
+    def _teardown_socket(self, only: Optional[ssl.SSLSocket] = None) -> None:
+        # only!=None — рвём, ТОЛЬКО если это всё ещё текущий сокет. Иначе
+        # «опоздавший» reconnect-поток (его connect() висел в сетевом I/O дольше,
+        # чем барьер join ждал) закрыл бы свежий сокет пользовательского connect()
+        # и убил бы живую сессию. Та же сокет-идентичность, что в _handle_drop.
+        if only is not None and self._sock is not only:
+            return
         self._stop_keepalive()
         sock = self._sock
         self._sock = None
@@ -283,7 +336,7 @@ class MaxClient:
                     )
                     self._dispatch(frame)
         finally:
-            self._handle_drop()
+            self._handle_drop(sock)
 
     def _dispatch(self, frame: MaxFrame) -> None:
         with self._pending_lock:
@@ -299,7 +352,14 @@ class MaxClient:
             except Exception:
                 pass
 
-    def _handle_drop(self) -> None:
+    def _handle_drop(self, sock: Optional[ssl.SSLSocket] = None) -> None:
+        # Идентификация сокета: устаревший reader (от уже заменённого сокета) не
+        # должен рвать сокет-преемник, поднятый параллельным connect() (иначе
+        # закрыл бы свежую сессию пользователя и обнулил бы pending нового
+        # сокета). Dart отменяет подписку до переустановки _socket; у нас этого
+        # нет — поэтому сверяем по объекту сокета. Проверка ДО _fail_all_pending.
+        if sock is not None and sock is not self._sock:
+            return
         if self._sock is None and self._closed:
             return
         self._fail_all_pending(MaxNotConnected("socket closed"))
@@ -312,11 +372,15 @@ class MaxClient:
         if self._closed:
             self._set_state(ConnectionState.DISCONNECTED)
             return
-        if self.auto_reconnect and self._token:
-            self._set_state(ConnectionState.RECONNECTING)
-            self._start_reconnect()
-        else:
-            self._set_state(ConnectionState.DISCONNECTED)
+        # Под локом, чтобы решение «пришёл дроп → стартуем реконнект» не
+        # разъезжалось с «успех-коммитом» reconnect-потока (иначе дроп в окне
+        # успеха мог быть потерян и клиент завис бы в RECONNECTING).
+        with self._reconnect_lock:
+            if self.auto_reconnect and self._token:
+                self._set_state(ConnectionState.RECONNECTING)
+                self._start_reconnect()
+            else:
+                self._set_state(ConnectionState.DISCONNECTED)
 
     # ───────────────────────── keepalive ─────────────────────────
 
@@ -365,20 +429,40 @@ class MaxClient:
     # ───────────────────────── reconnect ─────────────────────────
 
     def _start_reconnect(self) -> None:
-        if self._reconnect_running:
-            return
-        self._reconnect_running = True
-        self._reconnect_stop = threading.Event()
-        self._reconnect_thread = threading.Thread(
-            target=self._reconnect_loop, name="max-reconnect", daemon=True
-        )
-        self._reconnect_thread.start()
+        with self._reconnect_lock:
+            # Гард по ЖИВОСТИ потока, а не по флагу: при гонке «дроп в окне
+            # успеха» флаг _reconnect_running мог остаться True у уже выходящего
+            # потока — флаговый гард тогда навсегда заглушил бы авто-реконнект.
+            t = self._reconnect_thread
+            if t is not None and t.is_alive():
+                return
+            self._reconnect_running = True
+            self._reconnect_stop = threading.Event()
+            self._reconnect_thread = threading.Thread(
+                target=self._reconnect_loop, name="max-reconnect", daemon=True
+            )
+            self._reconnect_thread.start()
 
-    def _stop_reconnect(self) -> None:
-        self._reconnect_running = False
-        ev = self._reconnect_stop
+    def _stop_reconnect(self, join_timeout: float = 10.0) -> None:
+        """Остановить авто-реконнект. join_timeout>0 — БАРЬЕР: дождаться, пока
+        reconnect-поток реально выйдет, прежде чем продолжить. Без барьера
+        пользовательский connect() мог бы параллельно с догорающим реконнектом
+        писать self._sock и сделать второй LOGIN на том же токене (сигнал угона
+        антифроду — ровно то, что мы устраняем). Из самого reconnect-потока
+        (ветка мёртвого токена) join пропускаем: self-join → deadlock."""
+        with self._reconnect_lock:
+            self._reconnect_running = False
+            ev = self._reconnect_stop
+            t = self._reconnect_thread
         if ev is not None:
-            ev.set()  # будит спящий реконнект сразу (важно для close())
+            ev.set()  # будит спящий реконнект сразу
+        if (
+            join_timeout > 0
+            and t is not None
+            and t is not threading.current_thread()
+            and t.is_alive()
+        ):
+            t.join(timeout=join_timeout)
 
     def _since_last_login(self) -> float:
         """Секунд с последнего успешного LOGIN. Очень большое число, если в этой
@@ -436,24 +520,81 @@ class MaxClient:
             if self._closed or not self._reconnect_running:
                 return
             try:
-                self.connect(device_type=self._device_type)
+                self.connect(device_type=self._device_type, reset_closed=False)
+                # Сокет, поднятый ИМЕННО этой попыткой. Все teardown'ы ниже рвут
+                # только его (only=my_sock): если параллельный пользовательский
+                # connect() истёк по барьеру join раньше нашего I/O и уже поставил
+                # свой self._sock — мы его не тронем (иначе убили бы живую сессию).
+                my_sock = self._sock
+                # close() мог прийти, пока шёл connect (он поднял сокет+keepalive,
+                # но reset_closed=False не трогал _closed). Если так — рвём свой
+                # сокет и выходим БЕЗ LOGIN, чтобы не воскрешать закрытую сессию.
+                if self._closed or not self._reconnect_running:
+                    self._teardown_socket(only=my_sock)
+                    if not self.is_connected:
+                        self._set_state(ConnectionState.DISCONNECTED)
+                    return
                 if self._token:
                     self.login(self._token)
-                # Предохранитель считает только УСПЕШНЫЕ реконнекты: риск бана —
-                # частота re-auth, а не неудачные коннекты к лежащему серверу
-                # (иначе при оборванной сети 6 неудач = 8 мин офлайна без причины).
-                self._reconnect_ok_ts.append(time.monotonic())
-                self._debug("reconnect succeeded")
-                self._reconnect_running = False
-                return
+                if self._closed or not self._reconnect_running:
+                    self._teardown_socket(only=my_sock)
+                    if not self.is_connected:
+                        self._set_state(ConnectionState.DISCONNECTED)
+                    return
+                # LOGIN состоялся. Кормим предохранитель СРАЗУ, не дожидаясь,
+                # переживёт ли сокет окно успеха: риск бана — сама частота re-auth
+                # (op19), а не выживание сокета. Иначе «connect-OK → мгновенный
+                # дроп» крутил бы ~120 LOGIN/час МИМО счётчика флаппинга и cooldown
+                # никогда не срабатывал бы. Порт max_client.dart:1184 — там тоже
+                # считают каждую успешную авторизацию, безусловно.
+                with self._reconnect_lock:
+                    self._reconnect_ok_ts.append(time.monotonic())
+                    if self.is_connected:
+                        # Сокет жив — успех зафиксирован, гасим цикл. Обнуляем
+                        # хэндл потока, чтобы гонка «дроп в лаге reap» (is_alive()
+                        # ещё True у уже вышедшего потока) не заглушила новый
+                        # реконнект навсегда — _start_reconnect увидит None.
+                        self._debug("reconnect succeeded")
+                        self._reconnect_running = False
+                        self._reconnect_thread = None
+                        return
+                # Сокет отвалился в окне успеха: _handle_drop не смог стартовать
+                # новый поток (наш ещё жив) — крутимся сами, иначе клиент завис бы
+                # в RECONNECTING. На следующем круге _auth_throttle не даст
+                # повторный LOGIN раньше MIN_AUTH_INTERVAL.
+                self._debug("socket dropped during success window — retry")
+                attempt = 0
+                continue
             except MaxLoginFailed as e:
                 # Токен мёртв — нет смысла долбить сервер протухшим токеном.
-                # Останавливаем цикл, чистим токен, уходим в DISCONNECTED
-                # (UI по пустому token покажет экран входа).
+                # ОБЯЗАТЕЛЬНО рвём уже поднятый (connect успел) сокет, иначе
+                # keepalive пинговал бы неавторизованное соединение (аномальный
+                # трафик). Чистим токен, уходим в DISCONNECTED и сигналим UI
+                # (on_auth_invalid) уйти на экран входа.
                 self._debug(f"reconnect aborted (token invalid): {e}")
-                self._token = None
-                self._reconnect_running = False
-                self._set_state(ConnectionState.DISCONNECTED)
+                # Дискриминатор «мы всё ещё активный владелец» — ТОЛЬКО флаг
+                # _reconnect_running, а НЕ сверка сокета: пользовательский вход
+                # (connect(reset_closed=True)/close()) всегда снимает running
+                # через _stop_reconnect; а вот наш собственный сокет мог обнулить
+                # _handle_drop (сервер отверг токен и сразу закрыл соединение) —
+                # тогда running ещё True и разлогинить НУЖНО. Сверка self._sock
+                # здесь теряла бы logout в гонке NACK+drop (сокет уже None).
+                if self._reconnect_running:
+                    self._token = None
+                    self._stop_reconnect()
+                    self._teardown_socket(only=my_sock)
+                    if not self.is_connected:
+                        self._set_state(ConnectionState.DISCONNECTED)
+                    if self.on_auth_invalid:
+                        try:
+                            self.on_auth_invalid()
+                        except Exception:
+                            pass
+                else:
+                    # Нас вытеснил пользовательский вход (running снят) — молча
+                    # тушим свой (вероятно уже закрытый) сокет и выходим, не
+                    # трогая свежий токен/сессию пользователя.
+                    self._teardown_socket(only=my_sock)
                 return
             except Exception as e:  # noqa: BLE001
                 self._debug(f"reconnect failed: {e}")
