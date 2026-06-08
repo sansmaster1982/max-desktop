@@ -104,9 +104,22 @@ class SettingsDialog(QDialog):
 
         # Безопасность.
         root.addWidget(_section("Безопасность"))
-        twofa_btn = QPushButton("Сменить пароль 2FA")
-        twofa_btn.clicked.connect(self._change_2fa)
-        root.addWidget(twofa_btn)
+        self.twofa_status = QLabel("2FA: загрузка статуса…")
+        self.twofa_status.setObjectName("ChatSubtitle")
+        self.twofa_status.setWordWrap(True)
+        self.twofa_status.setStyleSheet("color: palette(mid);")
+        root.addWidget(self.twofa_status)
+
+        self._twofa_enabled = None  # None=неизвестно, пока не загрузили статус
+        self.twofa_btn = QPushButton("Сменить пароль 2FA")
+        self.twofa_btn.setEnabled(False)
+        self.twofa_btn.clicked.connect(self._twofa_primary)
+        root.addWidget(self.twofa_btn)
+
+        self.email_btn = QPushButton("Recovery email")
+        self.email_btn.setEnabled(False)
+        self.email_btn.clicked.connect(self._change_email)
+        root.addWidget(self.email_btn)
 
         sessions_btn = QPushButton("Активные сессии и устройства")
         sessions_btn.clicked.connect(self._show_sessions)
@@ -134,6 +147,8 @@ class SettingsDialog(QDialog):
         logout.setObjectName("Danger")
         logout.clicked.connect(self._logout)
         root.addWidget(logout)
+
+        self._load_2fa()
 
     # ───────────────────────── handlers ─────────────────────────
 
@@ -177,9 +192,69 @@ class SettingsDialog(QDialog):
             lines.append(f"• {s.get('label', 'Сессия')}{mark}{loc}")
         QMessageBox.information(self, "Активные сессии", "\n".join(lines))
 
-    def _change_2fa(self) -> None:
-        dlg = Change2FADialog(self.service, self)
+    def _load_2fa(self) -> None:
+        run_async(
+            self.service.get_2fa_status,
+            on_done=self._on_2fa_status,
+            on_error=self._on_2fa_error,
+        )
+
+    def _on_2fa_status(self, status: dict) -> None:
+        self._twofa_enabled = bool(status.get("enabled"))
+        email = status.get("email")
+        hint = status.get("hint")
+        self.twofa_btn.setEnabled(True)
+        if self._twofa_enabled:
+            parts = ["2FA включён"]
+            if email:
+                parts.append(f"recovery email: {email}")
+            if hint:
+                parts.append(f"подсказка: {hint}")
+            self.twofa_status.setText(" · ".join(parts))
+            self.twofa_btn.setText("Сменить пароль 2FA")
+            self.email_btn.setEnabled(True)
+            self.email_btn.setText("Сменить recovery email" if email else "Привязать recovery email")
+        else:
+            self.twofa_status.setText("2FA выключен")
+            self.twofa_btn.setText("Включить 2FA")
+            self.email_btn.setEnabled(False)
+            self.email_btn.setText("Recovery email (нужен 2FA)")
+
+    def _on_2fa_error(self, _e: object) -> None:
+        # Статус не загрузился — НЕ угадываем enable/change (иначе на 2FA-OFF
+        # аккаунте «Сменить пароль» выдал бы ложное «неверный пароль»). Кнопка
+        # перечитывает статус.
+        self._twofa_enabled = None
+        self.twofa_status.setText("2FA: не удалось загрузить статус (нажмите, чтобы повторить)")
+        self.twofa_btn.setText("Обновить статус 2FA")
+        self.twofa_btn.setEnabled(True)
+        self.email_btn.setEnabled(False)
+        self.email_btn.setText("Recovery email (нужен 2FA)")
+
+    def _twofa_primary(self) -> None:
+        # Ветвимся ТОЛЬКО на известном булеве. None (статус не загружен) —
+        # перечитываем статус, не открываем диалог наугад.
+        if self._twofa_enabled is None:
+            self._load_2fa()
+            return
+        dlg = (
+            Enable2FADialog(self.service, self)
+            if self._twofa_enabled is False
+            else Change2FADialog(self.service, self)
+        )
         dlg.exec()
+        self._load_2fa()
+
+    def _change_email(self) -> None:
+        if not self._twofa_enabled:
+            QMessageBox.information(
+                self, "Recovery email",
+                "Сначала включите 2FA — recovery email привязывается к нему.",
+            )
+            return
+        dlg = RecoveryEmailDialog(self.service, self)
+        dlg.exec()
+        self._load_2fa()
 
     def _terminate_others(self) -> None:
         confirm = QMessageBox.question(
@@ -329,3 +404,189 @@ def _pw_field(placeholder: str) -> QLineEdit:
     f.setPlaceholderText(placeholder)
     f.setEchoMode(QLineEdit.EchoMode.Password)
     return f
+
+
+class Enable2FADialog(QDialog):
+    """Включение 2FA, когда он выключен: только новый пароль (+ подсказка),
+    без текущего — авторизует токен. CREATE_TRACK -> SET_2FA."""
+
+    def __init__(self, service: MaxService, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.service = service
+        self.setWindowTitle("Включить 2FA")
+        self.resize(380, 320)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 20, 20, 20)
+        root.setSpacing(10)
+
+        title = QLabel("Включение 2FA")
+        title.setStyleSheet("font-size:16px; font-weight:700;")
+        root.addWidget(title)
+
+        info = QLabel(
+            "Пароль 2FA будет запрашиваться при входе на новых устройствах. "
+            "Запомните его — без него (и без recovery email) вход не восстановить."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("ChatSubtitle")
+        info.setStyleSheet("color: palette(mid);")
+        root.addWidget(info)
+
+        self.new = _pw_field("Пароль 2FA")
+        self.confirm = _pw_field("Повторите пароль")
+        root.addWidget(self.new)
+        root.addWidget(self.confirm)
+
+        self.hint = QLineEdit()
+        self.hint.setPlaceholderText("Подсказка (необязательно)")
+        root.addWidget(self.hint)
+
+        self.error = QLabel()
+        self.error.setWordWrap(True)
+        self.error.setStyleSheet(
+            "background: rgba(229,72,77,0.12); color:#E5484D; border-radius:8px; padding:8px 10px;"
+        )
+        self.error.hide()
+        root.addWidget(self.error)
+
+        root.addStretch(1)
+        self.btn = QPushButton("Включить 2FA")
+        self.btn.setObjectName("Primary")
+        self.btn.clicked.connect(self._submit)
+        root.addWidget(self.btn)
+
+    def _submit(self) -> None:
+        new = self.new.text()
+        confirm = self.confirm.text()
+        if not new:
+            self._err("Введите пароль 2FA.")
+            return
+        if new != confirm:
+            self._err("Пароли не совпадают.")
+            return
+        self.error.hide()
+        self.btn.setEnabled(False)
+        self.btn.setText("…")
+        run_async(
+            self.service.enable_2fa, new, self.hint.text().strip() or None,
+            on_done=lambda _r: self._ok(),
+            on_error=self._fail,
+        )
+
+    def _ok(self) -> None:
+        QMessageBox.information(self, "Готово", "2FA включён.")
+        self.accept()
+
+    def _fail(self, message: str) -> None:
+        self.btn.setEnabled(True)
+        self.btn.setText("Включить 2FA")
+        self._err(str(message))
+
+    def _err(self, text: str) -> None:
+        self.error.setText(text)
+        self.error.show()
+
+
+class RecoveryEmailDialog(QDialog):
+    """Привязка/смена recovery email (нужен включённый 2FA). Двухшаговый поток:
+    1) текущий пароль 2FA + email -> VERIFY_EMAIL (код уходит на почту);
+    2) код из письма -> CHECK_EMAIL."""
+
+    def __init__(self, service: MaxService, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.service = service
+        self._track_id: str | None = None
+        self.setWindowTitle("Recovery email")
+        self.resize(380, 340)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 20, 20, 20)
+        root.setSpacing(10)
+
+        title = QLabel("Recovery email для 2FA")
+        title.setStyleSheet("font-size:16px; font-weight:700;")
+        root.addWidget(title)
+
+        # Шаг 1.
+        self.cur = _pw_field("Текущий пароль 2FA")
+        self.email = QLineEdit()
+        self.email.setPlaceholderText("Email (на него придёт код)")
+        root.addWidget(self.cur)
+        root.addWidget(self.email)
+        self.send_btn = QPushButton("Отправить код")
+        self.send_btn.setObjectName("Primary")
+        self.send_btn.clicked.connect(self._send)
+        root.addWidget(self.send_btn)
+
+        # Шаг 2 (появляется после отправки кода).
+        self.code = QLineEdit()
+        self.code.setPlaceholderText("Код из письма")
+        self.code.hide()
+        root.addWidget(self.code)
+        self.confirm_btn = QPushButton("Подтвердить")
+        self.confirm_btn.setObjectName("Primary")
+        self.confirm_btn.clicked.connect(self._confirm)
+        self.confirm_btn.hide()
+        root.addWidget(self.confirm_btn)
+
+        self.error = QLabel()
+        self.error.setWordWrap(True)
+        self.error.setStyleSheet(
+            "background: rgba(229,72,77,0.12); color:#E5484D; border-radius:8px; padding:8px 10px;"
+        )
+        self.error.hide()
+        root.addWidget(self.error)
+        root.addStretch(1)
+
+    def _send(self) -> None:
+        self.error.hide()
+        self.send_btn.setEnabled(False)
+        self.send_btn.setText("…")
+        run_async(
+            self.service.start_set_recovery_email, self.cur.text(), self.email.text(),
+            on_done=self._code_sent,
+            on_error=self._send_fail,
+        )
+
+    def _code_sent(self, track_id: str) -> None:
+        self._track_id = track_id
+        self.cur.setEnabled(False)
+        self.email.setEnabled(False)
+        self.send_btn.setText("Код отправлен")
+        self.code.show()
+        self.confirm_btn.show()
+        QMessageBox.information(
+            self, "Код отправлен",
+            f"Код подтверждения отправлен на {self.email.text().strip()}. "
+            "Введите его из письма.",
+        )
+
+    def _send_fail(self, message: str) -> None:
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("Отправить код")
+        self._err(str(message))
+
+    def _confirm(self) -> None:
+        if not self._track_id:
+            self._err("Сначала отправьте код.")
+            return
+        self.error.hide()
+        self.confirm_btn.setEnabled(False)
+        self.confirm_btn.setText("…")
+        run_async(
+            self.service.confirm_recovery_email, self._track_id, self.code.text(),
+            on_done=lambda _r: self._ok(),
+            on_error=self._confirm_fail,
+        )
+
+    def _ok(self) -> None:
+        QMessageBox.information(self, "Готово", "Recovery email привязан.")
+        self.accept()
+
+    def _confirm_fail(self, message: str) -> None:
+        self.confirm_btn.setEnabled(True)
+        self.confirm_btn.setText("Подтвердить")
+        self._err(str(message))
+
+    def _err(self, text: str) -> None:
+        self.error.setText(text)
+        self.error.show()

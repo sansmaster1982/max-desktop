@@ -484,6 +484,22 @@ class MaxService:
 
     # ───────────────────────── 2FA ─────────────────────────
 
+    def get_2fa_status(self) -> dict:
+        """Состояние 2FA: {enabled:bool, email:str|None, hint:str|None}.
+        AUTH_2FA_DETAILS(104) -> {password:{enabled, hint, email}}."""
+        frame = self.client.auth_2fa_details()
+        return _parse_2fa_details(frame)
+
+    def enable_2fa(self, password: str, hint: Optional[str] = None) -> None:
+        """Включить 2FA, когда он выключен — только по токену, без старого пароля.
+        CREATE_TRACK(112) -> SET_2FA(111, expectedCapabilities:[1])."""
+        if not password:
+            raise ValueError("Введите пароль 2FA")
+        track_id = self.client.auth_create_track(0)
+        result = self.client.auth_set_2fa(track_id, password, hint)
+        if not result.ok:
+            raise ValueError(result.error_text() or "Не удалось включить 2FA")
+
     def change_2fa(self, old_password: str, new_password: str, hint: Optional[str] = None) -> None:
         """Сменить пароль 2FA: CREATE_TRACK -> CHECK(old) -> SET(new).
         Бросает ValueError с понятным текстом при ошибке."""
@@ -494,6 +510,47 @@ class MaxService:
         result = self.client.auth_set_2fa(track_id, new_password, hint)
         if not result.ok:
             raise ValueError(result.error_text() or "Не удалось изменить пароль")
+
+    def start_set_recovery_email(self, current_password: str, email: str) -> str:
+        """Шаг 1 привязки/смены recovery-email (нужен включённый 2FA).
+        CREATE_TRACK -> CHECK_PASSWORD(текущий) -> VERIFY_EMAIL(109, шлёт код).
+
+        ИНФЕРЕНС: что 113 «авторизует» трек для 109 — APK прямо НЕ подтверждает
+        (поток скопирован с change_2fa, где 113 предшествует 111). enable_2fa
+        доказывает, что свежий трек работает и без 113. Поэтому если 109 падает
+        ПОСЛЕ успешной проверки пароля — пробуем 109 на свежем треке без 113
+        (на случай, если 113 не нужен или «съедает» трек). Возвращает trackId
+        для шага 2 (CHECK_EMAIL 110)."""
+        email = (email or "").strip()
+        if "@" not in email or "." not in email:
+            raise ValueError("Введите корректный email")
+        track_id = self.client.auth_create_track(0)
+        check = self.client.auth_check_password(track_id, current_password)
+        if not check.ok:
+            self.log(f"recovery-email: CHECK_PASSWORD non-OK cmd={check.cmd}")
+            raise ValueError(check.error_text() or "Неверный текущий пароль 2FA")
+        res = self.client.auth_verify_email(track_id, email)
+        if res.ok:
+            return track_id
+        # 109 отвергнут после успешной проверки пароля — фолбэк: свежий трек без 113.
+        self.log(f"recovery-email: VERIFY_EMAIL non-OK cmd={res.cmd}; retry on fresh track")
+        track2 = self.client.auth_create_track(0)
+        res2 = self.client.auth_verify_email(track2, email)
+        if res2.ok:
+            return track2
+        self.log(f"recovery-email: VERIFY_EMAIL retry non-OK cmd={res2.cmd}")
+        raise ValueError(
+            res2.error_text() or res.error_text() or "Не удалось отправить код на email"
+        )
+
+    def confirm_recovery_email(self, track_id: str, code: str) -> None:
+        """Шаг 2: подтвердить код из письма (CHECK_EMAIL 110)."""
+        code = (code or "").strip()
+        if not code:
+            raise ValueError("Введите код из письма")
+        res = self.client.auth_check_email(track_id, code)
+        if not res.ok:
+            raise ValueError(res.error_text() or "Неверный код подтверждения")
 
     # ───────────────────────── push ─────────────────────────
 
@@ -588,6 +645,30 @@ class MaxService:
 
 
 # ───────────────────────── module helpers ─────────────────────────
+
+_EMAIL_RE = re.compile(rb"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+
+def _parse_2fa_details(frame) -> dict:
+    """Разобрать ответ AUTH_2FA_DETAILS(104): {password:{enabled, hint, email}}.
+    Если msgpack распаковался — берём из decoded; иначе сниффим по байтам
+    (как pretty_2fa_details в test5: \\xa7enabled\\xc3/\\xc2 и строка с '@')."""
+    d = frame.decoded
+    if isinstance(d, dict):
+        p = d.get("password")
+        if isinstance(p, dict):
+            pm = {str(k): v for k, v in p.items()}
+            return {
+                "enabled": bool(pm.get("enabled")),
+                "email": _str(pm.get("email")),
+                "hint": _str(pm.get("hint")),
+            }
+    raw = frame.body or b""
+    enabled = b"\xa7enabled\xc3" in raw  # fixstr 'enabled' + msgpack true
+    m = _EMAIL_RE.search(raw)
+    email = m.group(0).decode("ascii", "ignore") if m else None
+    return {"enabled": enabled, "email": email, "hint": None}
+
 
 def _extract_chats(info: dict) -> list[Chat]:
     arr = info.get("chats") or info.get("items") or info.get("result")
