@@ -39,8 +39,13 @@ DEFAULT_LOCALE = "ru"
 # Идёт в userAgent.buildNumber для ANDROID-INIT (см. _build_user_agent).
 APP_BUILD = 6689
 
-# Чувствительные ключи маскируются в логах.
-_SECRET_KEYS = {"token", "password", "oldpassword", "newpassword", "trackid"}
+# Чувствительные ключи маскируются в логах (PII/секреты). _redact приводит
+# ключ к нижнему регистру перед проверкой. email — PII, verifycode — одноразовый
+# код из письма (recovery-email флоу 109/110).
+_SECRET_KEYS = {
+    "token", "password", "oldpassword", "newpassword", "trackid",
+    "verifycode", "email",
+}
 
 
 class ConnectionState(Enum):
@@ -997,6 +1002,20 @@ class MaxClient:
         if hint:
             payload["hint"] = hint
         return self.request(opcodes.AUTH_SET_2FA, payload)
+
+    def auth_verify_email(self, track_id: str, email: str) -> MaxFrame:
+        """AUTH_VERIFY_EMAIL (109): отправить код подтверждения на recovery-email.
+        Пустой email — повторно отправить код на уже заданный адрес (resend)."""
+        payload: dict[str, Any] = {"trackId": track_id}
+        if email:
+            payload["email"] = email
+        return self.request(opcodes.AUTH_VERIFY_EMAIL, payload)
+
+    def auth_check_email(self, track_id: str, code: str) -> MaxFrame:
+        """AUTH_CHECK_EMAIL (110): подтвердить код из письма -> привязка email."""
+        return self.request(
+            opcodes.AUTH_CHECK_EMAIL, {"trackId": track_id, "verifyCode": code}
+        )
 
     @staticmethod
     def _find_track_id(f: MaxFrame) -> Optional[str]:
