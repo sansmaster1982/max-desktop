@@ -9,6 +9,7 @@ on_push/on_state вызываются из читающего потока, об
 from __future__ import annotations
 
 import random
+import re
 import socket
 import ssl
 import threading
@@ -144,6 +145,11 @@ class MaxClient:
         # времена успешных реконнектов для предохранителя флаппинга.
         self._last_login_ts: Optional[float] = None
         self._reconnect_ok_ts: list[float] = []
+
+        # Кэш chatId -> peer userId для 1:1 диалогов. В личный диалог сервер
+        # принимает userId собеседника, НЕ chatId (zg9.java: chatId XOR userId).
+        # Узнаём peer из ошибки сервера common.finder и шлём дальше уже по userId.
+        self._chat_peer: dict[int, int] = {}
 
     KEEPALIVE_INTERVAL = 20.0   # сек; окно сервера 11..61 c, шлём с запасом
     RECONNECT_BASE = 5.0        # база экспоненциального backoff
@@ -821,13 +827,17 @@ class MaxClient:
         text: str,
         *,
         attaches: Optional[list[dict]] = None,
+        peer_user_id: Optional[int] = None,
+        allow_dialog_fallback: bool = True,
     ) -> dict:
-        # Payload по декомпилу (docs/MEDIA_OPCODES.md): message несёт cid
-        # (клиентский id сообщения). test5.py его не слал — вероятная причина
-        # отказа сервера. Шлём cid + notify, randomId дублирует cid для дедупа.
+        """Отправить сообщение. SEND_MESSAGE(64) адресуется РОВНО одним полем
+        (zg9.java): `chatId` — для группы/канала/существующего чата; `userId` —
+        для личного диалога (peer). Если для chat_id известен peer (из кэша или
+        передан явно) — шлём userId. Иначе пробуем chatId; при ответе
+        not.found common.finder[User,<id>] вытаскиваем peer из ошибки,
+        кэшируем и повторяем по userId (как делает официальный клиент)."""
         cid = int(time.time() * 1000)
-        # cid/detectShare/isLive в декомпиле идут без "?" — реальный клиент шлёт
-        # их всегда. detectShare=True включает превью ссылок, как в оригинале.
+        # cid/detectShare/isLive — реальный клиент шлёт их всегда (lzc.java).
         message: dict[str, Any] = {
             "cid": cid,
             "text": text,
@@ -836,18 +846,45 @@ class MaxClient:
         }
         if attaches:
             message["attaches"] = attaches
-        f = self.request(
-            opcodes.SEND_MESSAGE,
-            {
-                "chatId": chat_id,
-                "message": message,
-                "notify": True,
-                "randomId": cid,
-            },
-        )
+
+        def _send(target: dict) -> MaxFrame:
+            payload = dict(target)
+            payload["message"] = message
+            payload["notify"] = True
+            payload["randomId"] = cid
+            return self.request(opcodes.SEND_MESSAGE, payload)
+
+        peer = peer_user_id or self._chat_peer.get(chat_id)
+        if peer:
+            f = _send({"userId": peer})
+        else:
+            f = _send({"chatId": chat_id})
+            if not f.ok and allow_dialog_fallback:
+                # 1:1 диалог: сервер не нашёл User по chatId и подсказал его id.
+                # learned может РАВНЯТЬСЯ chat_id (диалог открыт из контактов, где
+                # chatId = userId) — всё равно повторяем: userId это ДРУГОЕ поле.
+                # Кэшируем peer ТОЛЬКО при успехе retry, иначе не отравляем кэш.
+                learned = _peer_from_finder_error(f)
+                if learned:
+                    self._debug(f"send: chatId {chat_id} — диалог, peer={learned}, retry userId")
+                    f2 = _send({"userId": learned})
+                    if f2.ok:
+                        self._chat_peer[chat_id] = learned
+                        f = f2
+
         if not f.ok:
             raise MaxError(f"SEND_MESSAGE: {f.error_text()}")
         return _str_keys(f.decoded) if isinstance(f.decoded, dict) else {}
+
+    def peer_for(self, chat_id: int) -> Optional[int]:
+        """peer userId диалога, если он уже выяснен (для персиста на стороне service)."""
+        return self._chat_peer.get(chat_id)
+
+    def set_peer(self, chat_id: int, peer_user_id: int) -> None:
+        """Подсказать клиенту peer диалога (из кэша store), чтобы первая же
+        отправка шла сразу по userId, без неудачной попытки по chatId."""
+        if peer_user_id:
+            self._chat_peer[chat_id] = peer_user_id
 
     def typing(self, chat_id: int, is_typing: bool = True) -> None:
         try:
@@ -1105,6 +1142,38 @@ def _iana_timezone() -> str:
         11: "Asia/Magadan",
         12: "Asia/Kamchatka",
     }.get(hours, "Europe/Moscow")
+
+
+_FINDER_USER_RE = re.compile(r"User[,\s]+(\d+)")
+
+
+def _peer_from_finder_error(frame: "MaxFrame") -> Optional[int]:
+    """Из ошибки SEND_MESSAGE not.found вида
+    'Key: common.finder, args: [User, 335225177,]' достать peer userId — сервер
+    так подсказывает, что chatId на самом деле 1:1-диалог.
+
+    Срабатывает ТОЛЬКО на finder-промахе. Чужую ошибку (blocked/rate-limit и
+    т.п.), где в теле случайно встретилось 'User N', трактовать как «это диалог»
+    нельзя — иначе групповое сообщение уйдёт постороннему по userId."""
+    d = frame.decoded
+    if isinstance(d, dict):
+        err = str(d.get("error") or "")
+        if err and err not in ("not.found", "common.finder"):
+            return None  # реальный гейт: не finder — не диалог
+        text = str(d.get("message") or "")
+        if "User" not in text:
+            text = raw_ascii(frame.body)  # error — finder, можно сканировать raw
+    else:
+        text = raw_ascii(frame.body)
+        if "finder" not in text:
+            return None  # без структурного признака finder не угадываем
+    m = _FINDER_USER_RE.search(text)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            return None
+    return None
 
 
 def _str_keys(d: Any) -> dict:
