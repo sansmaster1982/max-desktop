@@ -59,6 +59,10 @@ class MaxService:
         self._contacts_cache: Optional[dict[int, Contact]] = None
         self._chat_fetch_ts: dict[int, float] = {}  # троттлинг history-фетча
         self._last_sms_ts = 0.0  # кулдаун повторных SMS (анти «too many attempts»)
+        # Кулдаун 2FA-операций: серия set_2fa/create_track в коротком окне
+        # триггерит серверный лимит error.user.restricted.set_2fa (так номер и
+        # блокировался). Офиц. клиент свой троттл НЕ имеет — добавляем сами.
+        self._twofa_cooldown_until = 0.0
 
     @property
     def my_id(self) -> Optional[int]:
@@ -581,6 +585,21 @@ class MaxService:
 
     # ───────────────────────── 2FA ─────────────────────────
 
+    TWOFA_COOLDOWN = 30.0  # сек между 2FA-операциями (анти error.user.restricted.set_2fa)
+
+    def _guard_2fa(self) -> None:
+        """Не дать частить 2FA-операциями — именно серия и блокирует номер."""
+        wait = self._twofa_cooldown_until - time.time()
+        if wait > 0:
+            raise ValueError(
+                f"Подождите {int(wait) + 1} c перед следующей операцией 2FA — "
+                "частые попытки временно блокируют 2FA на номере."
+            )
+
+    def _arm_2fa_cooldown(self, seconds: Optional[float] = None) -> None:
+        # seconds — серверный blockingDuration (если пришёл), иначе наш минимум.
+        self._twofa_cooldown_until = time.time() + max(self.TWOFA_COOLDOWN, seconds or 0.0)
+
     def get_2fa_status(self) -> dict:
         """Состояние 2FA: {enabled:bool, email:str|None, hint:str|None}.
         AUTH_2FA_DETAILS(104) -> {password:{enabled, hint, email}}."""
@@ -592,6 +611,8 @@ class MaxService:
         CREATE_TRACK(112) -> SET_2FA(111, expectedCapabilities:[0] = SET_PASSWORD)."""
         if not password:
             raise ValueError("Введите пароль 2FA")
+        self._guard_2fa()
+        self._arm_2fa_cooldown()
         track_id = self.client.auth_create_track(0)
         # capability=0 (SET_PASSWORD) — включение с нуля. [1] (UPDATE_PASSWORD)
         # сервер отвергает на выключенном 2FA (error password.is.off).
@@ -607,6 +628,8 @@ class MaxService:
         без ретраев — серия 2FA-операций триггерит антифрод-ограничение."""
         if not new_password:
             raise ValueError("Введите новый пароль 2FA")
+        self._guard_2fa()
+        self._arm_2fa_cooldown()
         track_id = self.client.auth_create_track(0)
         result = self.client.auth_set_2fa(track_id, new_password, hint, capability=1)
         if not result.ok:
@@ -619,11 +642,18 @@ class MaxService:
         email = (email or "").strip()
         if "@" not in email or "." not in email:
             raise ValueError("Введите корректный email")
+        self._guard_2fa()
+        self._arm_2fa_cooldown()
         track_id = self.client.auth_create_track(0)
         res = self.client.auth_verify_email(track_id, email)
         if not res.ok:
             self.log(f"recovery-email: VERIFY_EMAIL non-OK cmd={res.cmd}")
             raise ValueError(res.error_text() or "Не удалось отправить код на email")
+        # blockingDuration (сек) — серверный кулдаун до повторной отправки кода.
+        if isinstance(res.decoded, dict):
+            blocking = _to_int(res.decoded.get("blockingDuration"))
+            if blocking:
+                self._arm_2fa_cooldown(float(blocking))
         return track_id
 
     def confirm_recovery_email(self, track_id: str, code: str) -> None:
