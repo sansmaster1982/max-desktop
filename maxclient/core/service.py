@@ -7,15 +7,16 @@ on_chat_changed, которые UI оборачивает в Qt-сигналы.
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from collections import deque
 from typing import Callable, Optional
 
-from ..protocol.client import ConnectionState, MaxClient, MaxFrame
+from ..protocol.client import ConnectionState, MaxClient, MaxFrame, MaxLoginFailed
 from ..protocol import raw_parsers as rp
 from ..protocol.uploader import AttachKind, upload_and_build_attach
-from .config import AppPaths, Session, Settings
+from .config import AppPaths, Session, Settings, _load_or_create_device_profile
 from .models import Attach, Chat, Contact, Message, Profile, clean_message_text
 from .store import Store
 
@@ -39,6 +40,9 @@ class MaxService:
             app_version=settings.app_version,
             locale=settings.locale,
             device_id=session.device_id,
+            device_profile=_load_or_create_device_profile(
+                paths.device_profile_file, session.device_id
+            ),
             on_push=self._on_push,
             on_state=self._on_state,
             on_debug=self._log_debug,
@@ -63,6 +67,9 @@ class MaxService:
         # триггерит серверный лимит error.user.restricted.set_2fa (так номер и
         # блокировался). Офиц. клиент свой троттл НЕ имеет — добавляем сами.
         self._twofa_cooldown_until = 0.0
+        # run_async раскидывает задачи по QThreadPool (>1 поток) — check-then-set
+        # кулдауна 2FA должен быть атомарным, иначе два клика проскочат гонкой.
+        self._twofa_lock = threading.Lock()
 
     @property
     def my_id(self) -> Optional[int]:
@@ -110,13 +117,22 @@ class MaxService:
         prev_uid = self.session.my_user_id
         primary = self.session.device_type
         other = "ANDROID" if primary == "WEB" else "WEB"
+        rejected = 0
+        tried = 0
         for device_type in (primary, other):
+            tried += 1
             try:
                 if self.client.is_connected:
                     self.client.close()
                 self.client.connect(device_type=device_type)
                 frame = self.client.login(self.session.token)
+            except MaxLoginFailed:
+                # Сервер ОТКЛОНИЛ токен (мёртв/протух/инвалидирован). Перебор
+                # типов оставляем (мог быть рассинхрон deviceType), но считаем отказы.
+                rejected += 1
+                continue
             except Exception:
+                # Сетевой/handshake сбой — токен может быть жив, не считаем мёртвым.
                 continue
             kind = "web" if device_type == "WEB" else "android"
             if self.session.token_kind != kind:
@@ -124,6 +140,13 @@ class MaxService:
                 self.session.save()
             self._finish_login(frame, prev_uid)
             return True
+        # Оба типа дали именно ОТКАЗ АВТОРИЗАЦИИ (а не сетевой сбой) — токен мёртв.
+        # Чистим его, иначе каждый следующий запуск делал бы по 2 LOGIN(op19) на
+        # дохлом токене (лишние авторизации = сигнал антифроду). При сетевом сбое
+        # токен не трогаем — он может быть жив.
+        if rejected and rejected == tried:
+            self.log("try_restore: токен отклонён обоими deviceType — чистим мёртвый токен")
+            self.session.clear_token()
         return False
 
     SMS_COOLDOWN = 45.0  # сек между запросами SMS — чтобы не словить «too many attempts»
@@ -614,6 +637,23 @@ class MaxService:
         # seconds — серверный blockingDuration (если пришёл), иначе наш минимум.
         self._twofa_cooldown_until = time.time() + max(self.TWOFA_COOLDOWN, seconds or 0.0)
 
+    def _begin_2fa(self) -> None:
+        """Атомарно проверить кулдаун и взвести его. Под локом — иначе два
+        параллельных вызова (run_async кладёт в QThreadPool, maxThreadCount>1)
+        проскочат check-then-set гонкой и оба уйдут в сеть подряд."""
+        with self._twofa_lock:
+            self._guard_2fa()
+            self._arm_2fa_cooldown()
+
+    def _respect_blocking(self, frame) -> None:
+        """Если сервер вернул blockingDuration (сек) в ответе на 2FA-операцию —
+        выдержать ИМЕННО его (при error.user.restricted.set_2fa он длиннее нашего
+        минимума). Раньше учитывался только для recovery-email."""
+        if isinstance(frame.decoded, dict):
+            blocking = _to_int(frame.decoded.get("blockingDuration"))
+            if blocking:
+                self._arm_2fa_cooldown(float(blocking))
+
     def get_2fa_status(self) -> dict:
         """Состояние 2FA: {enabled:bool, email:str|None, hint:str|None}.
         AUTH_2FA_DETAILS(104) -> {password:{enabled, hint, email}}."""
@@ -625,13 +665,13 @@ class MaxService:
         CREATE_TRACK(112) -> SET_2FA(111, expectedCapabilities:[0] = SET_PASSWORD)."""
         if not password:
             raise ValueError("Введите пароль 2FA")
-        self._guard_2fa()
-        self._arm_2fa_cooldown()
+        self._begin_2fa()
         track_id = self.client.auth_create_track(0)
         # capability=0 (SET_PASSWORD) — включение с нуля. [1] (UPDATE_PASSWORD)
         # сервер отвергает на выключенном 2FA (error password.is.off).
         result = self.client.auth_set_2fa(track_id, password, hint, capability=0)
         if not result.ok:
+            self._respect_blocking(result)
             raise ValueError(result.error_text() or "Не удалось включить 2FA")
 
     def change_2fa(self, new_password: str, hint: Optional[str] = None) -> None:
@@ -642,11 +682,11 @@ class MaxService:
         без ретраев — серия 2FA-операций триггерит антифрод-ограничение."""
         if not new_password:
             raise ValueError("Введите новый пароль 2FA")
-        self._guard_2fa()
-        self._arm_2fa_cooldown()
+        self._begin_2fa()
         track_id = self.client.auth_create_track(0)
         result = self.client.auth_set_2fa(track_id, new_password, hint, capability=1)
         if not result.ok:
+            self._respect_blocking(result)
             raise ValueError(result.error_text() or "Не удалось изменить пароль 2FA")
 
     def start_set_recovery_email(self, email: str) -> str:
@@ -656,8 +696,7 @@ class MaxService:
         email = (email or "").strip()
         if "@" not in email or "." not in email:
             raise ValueError("Введите корректный email")
-        self._guard_2fa()
-        self._arm_2fa_cooldown()
+        self._begin_2fa()
         track_id = self.client.auth_create_track(0)
         res = self.client.auth_verify_email(track_id, email)
         if not res.ok:

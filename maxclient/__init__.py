@@ -4,5 +4,5 @@
 Слой protocol/ не зависит от GUI и тестируется отдельно.
 """
 
-__version__ = "1.0.10"
+__version__ = "1.0.11"
 __app_name__ = "MAX Desktop"
