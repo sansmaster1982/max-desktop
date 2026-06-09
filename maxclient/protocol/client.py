@@ -767,6 +767,7 @@ class MaxClient:
 
     def login(self, token: str) -> MaxFrame:
         """Логин по auth-token. Возвращает кадр LOGIN (raw содержит чаты/контакты)."""
+        sock = self._sock
         f = self.request(
             opcodes.LOGIN,
             {
@@ -780,6 +781,14 @@ class MaxClient:
             },
         )
         if not f.ok:
+            # Сервер отклонил токен. Рвём ИМЕННО это соединение (only=sock — не
+            # трогаем чужой свежий сокет, если пользователь перелогинился
+            # параллельно): иначе keepalive продолжал бы пинговать
+            # неавторизованный сокет — аномальный трафик после отказа авторизации,
+            # сигнал для антифрода (видно в debug.log: FAIL_LOGIN_TOKEN, дальше
+            # десятки PING). Реконнект-цикл рвёт свой сокет сам (except
+            # MaxLoginFailed); здесь закрываем дыру для прямых вызовов login().
+            self._teardown_socket(only=sock)
             raise MaxLoginFailed(f"LOGIN: {f.error_text()}")
         self._token = token
         # Метка для анти-шторм-троттла: следующий реконнект не будет логиниться
