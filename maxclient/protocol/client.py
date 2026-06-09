@@ -94,6 +94,7 @@ class MaxClient:
         app_version: str = DEFAULT_APP_VERSION,
         locale: str = DEFAULT_LOCALE,
         device_id: Optional[str] = None,
+        device_profile: Optional[dict] = None,
         on_push: Optional[Callable[[MaxFrame], None]] = None,
         on_state: Optional[Callable[[ConnectionState], None]] = None,
         on_debug: Optional[Callable[[str], None]] = None,
@@ -103,6 +104,10 @@ class MaxClient:
         self.app_version = app_version
         self.locale = locale
         self.device_id = device_id or str(uuid.uuid4())
+        # Per-install профиль устройства (модель/экран/osVersion) для userAgent.
+        # Пусто -> дефолты ниже (как раньше). Цель — чтобы UA не был побайтово
+        # одинаков у всех инсталляций (кластеризуемый антифрод-отпечаток).
+        self.device_profile = device_profile or {}
         self.on_push = on_push
         self.on_state = on_state
         self.on_debug = on_debug
@@ -702,13 +707,16 @@ class MaxClient:
             # версии и билда (это был бы новый сигнал «не родной клиент»).
             if self.app_version == DEFAULT_APP_VERSION:
                 ua["buildNumber"] = APP_BUILD
+            # Модель/экран/osVersion — из per-install профиля (стабильны на
+            # установку, но разные между инсталляциями), с дефолтами как раньше.
+            prof = self.device_profile
             ua.update(
                 {
-                    "osVersion": "34",
+                    "osVersion": str(prof.get("osVersion") or "34"),
                     "locale": self.locale,
                     "deviceLocale": "ru_RU",
-                    "deviceName": "Android",
-                    "screen": "1080x2340",
+                    "deviceName": str(prof.get("deviceName") or "Android"),
+                    "screen": str(prof.get("screen") or "1080x2340"),
                     "timezone": _iana_timezone(),
                 }
             )
