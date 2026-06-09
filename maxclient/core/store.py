@@ -90,6 +90,15 @@ class Store:
         with self._lock:
             self._db.close()
 
+    def clear_cache(self) -> None:
+        """Полностью очистить кэш аккаунта (чаты/контакты/сообщения). Нужно при
+        входе под ДРУГИМ аккаунтом — иначе старые данные «протекают» в новый."""
+        with self._lock:
+            self._db.execute("DELETE FROM messages")
+            self._db.execute("DELETE FROM contacts")
+            self._db.execute("DELETE FROM chats")
+            self._db.commit()
+
     # ───────────────────────── chats ─────────────────────────
 
     def upsert_chat(self, chat: Chat) -> None:
