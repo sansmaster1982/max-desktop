@@ -107,6 +107,7 @@ class MaxService:
         ошибочно помечен как android."""
         if not self.session.token:
             return False
+        prev_uid = self.session.my_user_id
         primary = self.session.device_type
         other = "ANDROID" if primary == "WEB" else "WEB"
         for device_type in (primary, other):
@@ -121,8 +122,7 @@ class MaxService:
             if self.session.token_kind != kind:
                 self.session.token_kind = kind
                 self.session.save()
-            self._ingest_login(frame)
-            self._load_my_profile()
+            self._finish_login(frame, prev_uid)
             return True
         return False
 
@@ -153,14 +153,24 @@ class MaxService:
             self.client.connect(device_type="ANDROID")
         return self.client.confirm_2fa(track_id, password)
 
+    def _finish_login(self, frame, prev_uid: Optional[int]) -> None:
+        """Догрузить профиль и наполнить кэш. Если вошли под ДРУГИМ аккаунтом
+        (сменился my_user_id) — сперва чистим локальную базу, иначе старые
+        чаты/контакты протекут в новый аккаунт."""
+        prof = self._load_my_profile()  # ставит session.my_user_id
+        if prev_uid and prof.id and prof.id != prev_uid:
+            self.log(f"account changed {prev_uid} -> {prof.id}: clearing local cache")
+            self.store.clear_cache()
+            self._invalidate_contacts()
+        self._ingest_login(frame)
+
     def complete_login(self, token: str, kind: str = "android") -> None:
         self.log("complete_login: start")
+        prev_uid = self.session.my_user_id
         self.session.set_token(token, kind)
         frame = self.client.login(token)
-        self.log("complete_login: login ok, ingesting chats")
-        self._ingest_login(frame)
-        self.log("complete_login: loading profile")
-        self._load_my_profile()
+        self.log("complete_login: login ok")
+        self._finish_login(frame, prev_uid)
         self.log("complete_login: done")
 
     def login_with_token(self, token: str) -> None:
@@ -168,13 +178,13 @@ class MaxService:
         token = token.strip()
         if not token:
             raise ValueError("Пустой токен")
+        prev_uid = self.session.my_user_id
         if self.client.is_connected:
             self.client.close()
         self.client.connect(device_type="WEB")
         frame = self.client.login(token)
         self.session.set_token(token, "web")
-        self._ingest_login(frame)
-        self._load_my_profile()
+        self._finish_login(frame, prev_uid)
 
     def _ingest_login(self, frame) -> None:
         """Достать список чатов из ответа LOGIN и наполнить кэш (без повторного входа)."""
@@ -198,6 +208,10 @@ class MaxService:
         except Exception:
             pass
         self.session.clear_token()
+        # Чистим локальный кэш: иначе при входе другим аккаунтом покажутся
+        # старые чаты/контакты. Так «выйти → войти новым» даёт чистый старт.
+        self.store.clear_cache()
+        self._invalidate_contacts()
         self.client.close()
 
     def _load_my_profile(self) -> Profile:
