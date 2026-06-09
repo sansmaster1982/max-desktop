@@ -375,6 +375,7 @@ class Change2FADialog(QDialog):
         self.confirm = _pw_field("Повторите новый пароль")
         root.addWidget(self.new)
         root.addWidget(self.confirm)
+        _add_show_toggle(root, self.new, self.confirm)
 
         self.hint = QLineEdit()
         self.hint.setPlaceholderText("Подсказка (необязательно)")
@@ -434,6 +435,20 @@ def _pw_field(placeholder: str) -> QLineEdit:
     return f
 
 
+def _add_show_toggle(layout, *fields: QLineEdit) -> QCheckBox:
+    """Чекбокс «Показать пароль» — переключает видимость переданных полей."""
+    cb = QCheckBox("Показать пароль")
+
+    def _t(on: bool) -> None:
+        mode = QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password
+        for f in fields:
+            f.setEchoMode(mode)
+
+    cb.toggled.connect(_t)
+    layout.addWidget(cb)
+    return cb
+
+
 class Enable2FADialog(QDialog):
     """Включение 2FA, когда он выключен: только новый пароль (+ подсказка),
     без текущего — авторизует токен. CREATE_TRACK -> SET_2FA."""
@@ -464,6 +479,7 @@ class Enable2FADialog(QDialog):
         self.confirm = _pw_field("Повторите пароль")
         root.addWidget(self.new)
         root.addWidget(self.confirm)
+        _add_show_toggle(root, self.new, self.confirm)
 
         self.hint = QLineEdit()
         self.hint.setPlaceholderText("Подсказка (необязательно)")
