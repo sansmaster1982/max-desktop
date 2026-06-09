@@ -28,6 +28,11 @@ class AppPaths:
         # чтобы для сервера это всегда было одно и то же устройство (смена
         # deviceId = сигнал «новое устройство» для антифрода).
         self.device_file = self.dir / "device_id.txt"
+        # Профиль устройства для userAgent (модель/экран/osVersion). Если он
+        # захардкожен одинаково у всех инсталляций — антифрод кластеризует все
+        # номера этого клиента в один отпечаток. Поэтому фиксируем стабильный,
+        # но варьирующийся на установку профиль (детерминирован из deviceId).
+        self.device_profile_file = self.dir / "device_profile.json"
         self.db_file = self.dir / "cache.db"
         self.media_dir = self.dir / "media"
         self.media_dir.mkdir(parents=True, exist_ok=True)
@@ -130,6 +135,39 @@ class Session:
             "device_id": self.device_id,
         }
         _write_json(self._paths.session_file, meta)
+
+
+# Реальные, самосогласованные Android-устройства (model code / экран / API).
+# Все современные — arm64-v8a. Захардкоженный одинаковый UA (deviceName="Android",
+# screen=1080x2340 у ВСЕХ) — кластеризуемый отпечаток «один сторонний клиент».
+# На установку выбираем СТАБИЛЬНЫЙ профиль детерминированно из deviceId.
+_ANDROID_DEVICES = [
+    {"deviceName": "SM-G991B", "screen": "1080x2400", "osVersion": "34"},   # Galaxy S21
+    {"deviceName": "SM-G996B", "screen": "1080x2400", "osVersion": "34"},   # Galaxy S21+
+    {"deviceName": "SM-S911B", "screen": "1080x2340", "osVersion": "34"},   # Galaxy S23
+    {"deviceName": "SM-A536B", "screen": "1080x2400", "osVersion": "34"},   # Galaxy A53
+    {"deviceName": "SM-A525F", "screen": "1080x2400", "osVersion": "33"},   # Galaxy A52
+    {"deviceName": "SM-A346B", "screen": "1080x2340", "osVersion": "34"},   # Galaxy A34
+    {"deviceName": "Pixel 6", "screen": "1080x2400", "osVersion": "34"},
+    {"deviceName": "Pixel 7", "screen": "1080x2400", "osVersion": "34"},
+    {"deviceName": "2201117TG", "screen": "1080x2400", "osVersion": "33"},  # Redmi Note 11
+    {"deviceName": "M2101K6G", "screen": "1080x2400", "osVersion": "33"},   # Redmi Note 10 Pro
+]
+
+
+def _load_or_create_device_profile(path: Path, device_id: str) -> dict:
+    """Стабильный per-install профиль устройства для userAgent. Детерминирован
+    из deviceId (один deviceId -> один профиль), сохраняется в файл, чтобы не
+    «прыгать» при обновлении таблицы (смена профиля = сигнал «новое устройство»)."""
+    data = _read_json(path)
+    if all(data.get(k) for k in ("deviceName", "screen", "osVersion")):
+        return {k: data[k] for k in ("deviceName", "screen", "osVersion")}
+    import hashlib
+
+    h = int(hashlib.sha256((device_id or "x").encode("utf-8")).hexdigest(), 16)
+    prof = dict(_ANDROID_DEVICES[h % len(_ANDROID_DEVICES)])
+    _write_json(path, prof)
+    return prof
 
 
 def _load_or_create_device_id(path: Path, migrated: str = "") -> str:
