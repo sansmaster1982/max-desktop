@@ -1,0 +1,244 @@
+{
+  "scope": "Direct src/3rdparty attribution records; platform-specific entries may not be deployed; not a complete binary SBOM",
+  "entries": [
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/D3D12MemoryAllocator/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-D3D12MemoryAllocator.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/VulkanMemoryAllocator/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-VulkanMemoryAllocator.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/android/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-android.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/blake2/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-blake2.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/double-conversion/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-double-conversion.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/easing/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-easing.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/emoji-segmenter/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-emoji-segmenter.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/freetype/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-freetype.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/gradle/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-gradle.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/harfbuzz-ng/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-harfbuzz-ng.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/icc/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-icc.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/libjpeg/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-libjpeg.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/libpng/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-libpng.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/md4/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-md4.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/md4c/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-md4c.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/md5/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-md5.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/pcre2/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-pcre2.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/pixman/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-pixman.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/rfc6234/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-rfc6234.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/sha1/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-sha1.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/siphash/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-siphash.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/sqlite/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-sqlite.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/tinycbor/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-tinycbor.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/wasm/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-wasm.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/wintab/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-wintab.json"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/src/3rdparty/zlib/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtbase-zlib.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/dr_libs/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-dr_libs.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/eigen/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-eigen.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-ffmpeg.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/pffft/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-pffft.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/resonance-audio/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-resonance-audio.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/signalsmith-stretch/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-signalsmith-stretch.json"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/tlsf/qt_attribution.json",
+      "local_file": "Qt-6.11.1/attributions/qt_qtmultimedia-tlsf.json"
+    }
+  ],
+  "not_found_or_nested": [
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/dbus-ifaces",
+      "reason": "no-direct-qt_attribution.json"
+    },
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/forkfd",
+      "reason": "invalid-json"
+    },
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/iaccessible2",
+      "reason": "no-direct-qt_attribution.json"
+    },
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/libpsl",
+      "reason": "invalid-json"
+    },
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/sha3",
+      "reason": "invalid-json"
+    },
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/wayland",
+      "reason": "no-direct-qt_attribution.json"
+    },
+    {
+      "repo": "qt/qtbase",
+      "path": "src/3rdparty/xcb",
+      "reason": "invalid-json"
+    },
+    {
+      "repo": "qt/qtsvg",
+      "reason": "no-src-thirdparty-list"
+    }
+  ]
+}
