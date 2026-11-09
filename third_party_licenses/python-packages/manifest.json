@@ -1,0 +1,83 @@
+{
+  "licenseCompletenessClaimed": false,
+  "installedLicenseTexts": [
+    {
+      "package": "requests",
+      "version": "2.32.5",
+      "file": "requests/09e8a9bc-LICENSE",
+      "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+    },
+    {
+      "package": "qrcode",
+      "version": "8.2",
+      "file": "qrcode/40dfb903-LICENSE",
+      "sha256": "40dfb903c94ee3f789500131311186548ecba5cefd3557623d7700e2522ab994"
+    },
+    {
+      "package": "websocket-client",
+      "version": "1.9.2",
+      "file": "websocket-client/14214b7b-LICENSE",
+      "sha256": "14214b7bbb6952ada76afea206b6c393f2563d4e7678be0232e1a1d216716679"
+    },
+    {
+      "package": "msgpack",
+      "version": "1.2.3",
+      "file": "msgpack/4fbdff42-COPYING",
+      "sha256": "4fbdff42eba4593c16f7a7ea7078883b2b734870a1e2b636284ce2dce62bf4f7"
+    },
+    {
+      "package": "zstandard",
+      "version": "0.25.0",
+      "file": "zstandard/c15b28f8-LICENSE",
+      "sha256": "c15b28f8866500bd3d607c739e87710aa5c47627aa30a0573948414564ff1da2"
+    },
+    {
+      "package": "pillow",
+      "version": "12.1.1",
+      "file": "pillow/926df5f8-LICENSE",
+      "sha256": "926df5f888a7337fd4126a435202edf2847312be81a167df91a6d70cfa3f2ed3"
+    },
+    {
+      "package": "certifi",
+      "version": "2026.2.25",
+      "file": "certifi/e93716da-LICENSE",
+      "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+    },
+    {
+      "package": "charset-normalizer",
+      "version": "3.4.5",
+      "file": "charset-normalizer/18577485-LICENSE",
+      "sha256": "18577485d3704f1a479ded8e573c0976cfed315fd2fd17983fa988da4c2f70d1"
+    },
+    {
+      "package": "idna",
+      "version": "3.11",
+      "file": "idna/b7a336ab-LICENSE.md",
+      "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
+    },
+    {
+      "package": "urllib3",
+      "version": "2.6.3",
+      "file": "urllib3/130e3a64-LICENSE.txt",
+      "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+    },
+    {
+      "package": "colorama",
+      "version": "0.4.6",
+      "file": "colorama/cac35c02-LICENSE.txt",
+      "sha256": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318"
+    },
+    {
+      "package": "pyinstaller",
+      "version": "6.19.0",
+      "file": "pyinstaller/dcf75fdb-COPYING.txt",
+      "sha256": "dcf75fdb959db1e3b41c0f8505069d2ece781b5ec6b3d0a4d30975cfc6580245"
+    },
+    {
+      "package": "Python",
+      "version": "3.11.9",
+      "file": "Python-3.11.9-LICENSE.txt",
+      "sha256": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+"""Owned Info presentation strings: en, es, pt-BR, fr, uz, be.
+
+Raw chat/folder/file titles and supplied status text are not translation keys.
+"""
+
+CONVERSATION_INFO_TRANSLATIONS = {
+    'MAX пока не подтвердил изменение. Можно проверить состояние.': ('MAX has not confirmed the change yet. You can check its status.', 'MAX aún no ha confirmado el cambio. Puedes comprobar su estado.', 'O MAX ainda não confirmou a alteração. Você pode verificar o status.', 'MAX n’a pas encore confirmé le changement. Vous pouvez vérifier son état.', 'MAX o‘zgarishni hali tasdiqlamadi. Holatini tekshirishingiz mumkin.', 'MAX пакуль не пацвердзіў змену. Можна праверыць стан.'),
+    'MAX не передал следующий курсор общих чатов.': ('MAX did not provide a cursor for the next page of common chats.', 'MAX no proporcionó un cursor para la siguiente página de chats en común.', 'O MAX não forneceu um cursor para a próxima página de chats em comum.', 'MAX n’a pas fourni de curseur pour la page suivante des discussions en commun.', 'MAX umumiy chatlarning keyingi sahifasi kursorini bermadi.', 'MAX не перадаў курсор наступнай старонкі агульных чатаў.'),
+    'MAX не передал новый курсор сообщений.': ('MAX did not provide a new message cursor.', 'MAX no proporcionó un nuevo cursor de mensajes.', 'O MAX não forneceu um novo cursor de mensagens.', 'MAX n’a pas fourni de nouveau curseur de messages.', 'MAX xabarlarning yangi kursorini bermadi.', 'MAX не перадаў новы курсор паведамленняў.'),
+    'Порядок сообщений MAX не подтверждён; продолжение недоступно.': ('The MAX message order is unconfirmed; loading more is unavailable.', 'El orden de los mensajes de MAX no está confirmado; no se pueden cargar más.', 'A ordem das mensagens do MAX não foi confirmada; não é possível carregar mais.', 'L’ordre des messages MAX n’est pas confirmé ; le chargement de la suite est indisponible.', 'MAX xabarlari tartibi tasdiqlanmagan; yana yuklash mavjud emas.', 'Парадак паведамленняў MAX не пацверджаны; працяг недаступны.'),
+    'Нет подтверждённого времени начального сообщения.': ('The starting message time has not been confirmed.', 'No se ha confirmado la hora del mensaje inicial.', 'O horário da mensagem inicial não foi confirmado.', 'L’heure du message initial n’a pas été confirmée.', 'Boshlang‘ich xabar vaqti tasdiqlanmagan.', 'Няма пацверджанага часу пачатковага паведамлення.'),
+    'Выбрать время без звука': ('Choose mute duration', 'Elegir duración del silencio', 'Escolher duração do silêncio', 'Choisir la durée du mode silencieux', 'Ovozni o‘chirish muddatini tanlash', 'Выбраць час без гуку'),
+    'Данные ещё не получены': ('Data has not been received yet', 'Aún no se han recibido los datos', 'Os dados ainda não foram recebidos', 'Les données n’ont pas encore été reçues', 'Ma’lumotlar hali olinmagan', 'Даныя яшчэ не атрыманыя'),
+    'Данные недоступны': ('Data unavailable', 'Datos no disponibles', 'Dados indisponíveis', 'Données indisponibles', 'Ma’lumotlar mavjud emas', 'Даныя недаступныя'),
+    'Загрузить ещё': ('Load more', 'Cargar más', 'Carregar mais', 'Charger davantage', 'Yana yuklash', 'Загрузіць яшчэ'),
+    'Звонки и видеозвонки в этой сборке пока не реализованы.': ('Calls and video calls are not available in this build yet.', 'Las llamadas y videollamadas aún no están disponibles en esta versión.', 'Chamadas e videochamadas ainda não estão disponíveis nesta versão.', 'Les appels et appels vidéo ne sont pas encore disponibles dans cette version.', 'Bu versiyada qo‘ng‘iroqlar va videoqo‘ng‘iroqlar hali mavjud emas.', 'Званкі і відэазванкі ў гэтай зборцы пакуль не рэалізаваныя.'),
+    'Звонок': ('Call', 'Llamada', 'Chamada', 'Appel', 'Qo‘ng‘iroq', 'Званок'),
+    'Изменение сведений недоступно': ('Editing details is unavailable', 'No se pueden editar los datos', 'Edição de dados indisponível', 'Modification des informations indisponible', 'Ma’lumotlarni o‘zgartirish mavjud emas', 'Змена звестак недаступная'),
+    'Медиа: фотографии и видео': ('Media: photos and videos', 'Multimedia: fotos y vídeos', 'Mídia: fotos e vídeos', 'Médias : photos et vidéos', 'Media: suratlar va videolar', 'Медыя: фатаграфіі і відэа'),
+    'Найти среди загруженных элементов': ('Search loaded items', 'Buscar en los elementos cargados', 'Pesquisar nos itens carregados', 'Rechercher dans les éléments chargés', 'Yuklangan elementlardan qidirish', 'Знайсці сярод загружаных элементаў'),
+    'Не удалось загрузить ещё элементы': ('Could not load more items', 'No se pudieron cargar más elementos', 'Não foi possível carregar mais itens', 'Impossible de charger davantage d’éléments', 'Yana elementlarni yuklab bo‘lmadi', 'Не ўдалося загрузіць яшчэ элементы'),
+    'Не удалось загрузить раздел': ('Could not load this section', 'No se pudo cargar esta sección', 'Não foi possível carregar esta seção', 'Impossible de charger cette section', 'Bu bo‘limni yuklab bo‘lmadi', 'Не ўдалося загрузіць раздзел'),
+    'Не удалось обновить сведения': ('Could not update details', 'No se pudieron actualizar los datos', 'Não foi possível atualizar os dados', 'Impossible d’actualiser les informations', 'Ma’lumotlarni yangilab bo‘lmadi', 'Не ўдалося абнавіць звесткі'),
+    'Недоступно': ('Unavailable', 'No disponible', 'Indisponível', 'Indisponible', 'Mavjud emas', 'Недаступна'),
+    'Нет данных для отображения': ('No data to display', 'No hay datos para mostrar', 'Nenhum dado para exibir', 'Aucune donnée à afficher', 'Ko‘rsatish uchun ma’lumot yo‘q', 'Няма даных для паказу'),
+    'Ничего не найдено среди загруженных элементов': ('No matches among loaded items', 'No hay coincidencias entre los elementos cargados', 'Nenhum resultado nos itens carregados', 'Aucun résultat parmi les éléments chargés', 'Yuklangan elementlardan hech narsa topilmadi', 'Нічога не знойдзена сярод загружаных элементаў'),
+    'Номер не передан': ('Phone number not provided', 'Número de teléfono no facilitado', 'Número de telefone não informado', 'Numéro de téléphone non fourni', 'Telefon raqami berilmagan', 'Нумар не перададзены'),
+    'Ожидаем подтверждения…': ('Waiting for confirmation…', 'Esperando confirmación…', 'Aguardando confirmação…', 'En attente de confirmation…', 'Tasdiq kutilmoqda…', 'Чакаем пацвярджэння…'),
+    'Поиск среди загруженных элементов раздела': ('Search among loaded items in this section', 'Buscar entre los elementos cargados de esta sección', 'Pesquisar nos itens carregados desta seção', 'Rechercher parmi les éléments chargés de cette section', 'Bu bo‘limdagi yuklangan elementlardan qidirish', 'Пошук сярод загружаных элементаў раздзела'),
+    'Раздел пока недоступен': ('This section is not available yet', 'Esta sección aún no está disponible', 'Esta seção ainda não está disponível', 'Cette section n’est pas encore disponible', 'Bu bo‘lim hali mavjud emas', 'Раздзел пакуль недаступны'),
+    'Сведения недоступны': ('Details unavailable', 'Datos no disponibles', 'Dados indisponíveis', 'Informations indisponibles', 'Ma’lumotlar mavjud emas', 'Звесткі недаступныя'),
+    'Сведения о выбранном чате недоступны': ('Details of the selected chat are unavailable', 'Los datos del chat seleccionado no están disponibles', 'Os dados do chat selecionado estão indisponíveis', 'Les informations de la discussion sélectionnée sont indisponibles', 'Tanlangan chat ma’lumotlari mavjud emas', 'Звесткі пра выбраны чат недаступныя'),
+    'Скопировать номер телефона': ('Copy phone number', 'Copiar número de teléfono', 'Copiar número de telefone', 'Copier le numéro de téléphone', 'Telefon raqamini nusxalash', 'Скапіяваць нумар тэлефона'),
+    'Состояние звука недоступно': ('Sound status unavailable', 'Estado del sonido no disponible', 'Status do som indisponível', 'État du son indisponible', 'Ovoz holati mavjud emas', 'Стан гуку недаступны'),
+    'Сохранить файл': ('Save file', 'Guardar archivo', 'Salvar arquivo', 'Enregistrer le fichier', 'Faylni saqlash', 'Захаваць файл'),
+    'Телефон': ('Phone', 'Teléfono', 'Telefone', 'Téléphone', 'Telefon', 'Тэлефон'),
+    'Январь': ('January', 'Enero', 'Janeiro', 'Janvier', 'Yanvar', 'Студзень'),
+    'Февраль': ('February', 'Febrero', 'Fevereiro', 'Février', 'Fevral', 'Люты'),
+    'Март': ('March', 'Marzo', 'Março', 'Mars', 'Mart', 'Сакавік'),
+    'Апрель': ('April', 'Abril', 'Abril', 'Avril', 'Aprel', 'Красавік'),
+    'Май': ('May', 'Mayo', 'Maio', 'Mai', 'May', 'Май'),
+    'Июнь': ('June', 'Junio', 'Junho', 'Juin', 'Iyun', 'Чэрвень'),
+    'Июль': ('July', 'Julio', 'Julho', 'Juillet', 'Iyul', 'Ліпень'),
+    'Август': ('August', 'Agosto', 'Agosto', 'Août', 'Avgust', 'Жнівень'),
+    'Сентябрь': ('September', 'Septiembre', 'Setembro', 'Septembre', 'Sentabr', 'Верасень'),
+    'Октябрь': ('October', 'Octubre', 'Outubro', 'Octobre', 'Oktabr', 'Кастрычнік'),
+    'Ноябрь': ('November', 'Noviembre', 'Novembro', 'Novembre', 'Noyabr', 'Лістапад'),
+    'Декабрь': ('December', 'Diciembre', 'Dezembro', 'Décembre', 'Dekabr', 'Снежань'),
+}
+
+__all__ = ['CONVERSATION_INFO_TRANSLATIONS']

@@ -7,9 +7,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
 
 _DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets"))
+_BRAND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "resources"))
 
 
 def icon_file() -> str | None:
+    for name in ("maxim.ico", "maxim_icon.png"):
+        path = os.path.join(_BRAND_DIR, name)
+        if os.path.isfile(path):
+            return path
     for name in ("icon.ico", "icon.png"):
         path = os.path.join(_DIR, name)
         if os.path.isfile(path):
@@ -23,8 +28,9 @@ def app_icon() -> QIcon:
 
 
 def logo_pixmap(size: int) -> QPixmap | None:
-    for name in ("icon_256.png", "icon.png"):
-        path = os.path.join(_DIR, name)
+    paths = [os.path.join(_BRAND_DIR, "maxim_icon.png")]
+    paths.extend(os.path.join(_DIR, name) for name in ("icon_256.png", "icon.png"))
+    for path in paths:
         if os.path.isfile(path):
             pix = QPixmap(path)
             if not pix.isNull():

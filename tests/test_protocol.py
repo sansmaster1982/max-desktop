@@ -43,7 +43,7 @@ eq("read big int", rp.read_int_after_key(blob, b"\xa6sender"), 1000000)
 paths = AppPaths()
 svc = MaxService(paths, Settings.load(paths), Session.load(paths))
 frame = MaxFrame(cmd=0, seq=999, opcode=128, body=b"",
-                 decoded={"chatId": 42, "message": {"text": "hi", "sender": 7, "id": 100, "time": 1716900000000}})
+                 decoded={"chatId": 42, "message": {"text": "hi", "sender": 7, "id": 100, "time": 1716900000000, "type": "USER"}})
 msg = svc._parse_push(frame)
 eq("push chatId", msg.chat_id, 42)
 eq("push text", msg.text, "hi")

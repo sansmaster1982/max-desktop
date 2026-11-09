@@ -7,24 +7,28 @@ from __future__ import annotations
 
 from enum import Enum, auto
 from typing import Optional
+import uuid
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from .. import __app_name__
 from ..core.config import Settings
 from ..core.service import MaxService
+from ..core.token_import import read_web_session
 from .assets import logo_pixmap
 from .async_runner import run_async
+from .qr_login_panel import QrLoginPanel
 
 
 class _Step(Enum):
@@ -40,7 +44,8 @@ class LoginWindow(QWidget):
         super().__init__()
         self.service = service
         self.settings = settings
-        self._mode_token = False
+        self._mode_token = True
+        self._mode_qr = False
         self._step = _Step.PHONE
         self._verify_token: Optional[str] = None
         self._track_id: Optional[str] = None
@@ -52,7 +57,7 @@ class LoginWindow(QWidget):
         self._watchdog.setInterval(45000)
         self._watchdog.timeout.connect(self._on_watchdog)
 
-        self.setWindowTitle("Вход в MAX")
+        self.setWindowTitle(f"Вход в {__app_name__}")
         self.resize(560, 720)
         self._build()
         self._render()
@@ -78,7 +83,7 @@ class LoginWindow(QWidget):
         if pix is not None:
             logo.setPixmap(pix)
         else:
-            logo.setText("MAX")
+            logo.setText(__app_name__)
             logo.setFixedSize(76, 76)
             logo.setStyleSheet(
                 f"background:{self.settings.accent}; color:white; border-radius:22px;"
@@ -87,7 +92,7 @@ class LoginWindow(QWidget):
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         col.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        title = QLabel("MAX Desktop")
+        title = QLabel(__app_name__)
         title.setStyleSheet("font-size:22px; font-weight:700;")
         title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         col.addWidget(title)
@@ -97,17 +102,22 @@ class LoginWindow(QWidget):
         seg.setSpacing(0)
         self.btn_sms = QPushButton("По SMS")
         self.btn_token = QPushButton("По токену")
+        self.btn_qr = QPushButton("QR-код")
         self.btn_sms.setCheckable(True)
         self.btn_token.setCheckable(True)
-        self.btn_sms.setChecked(True)
+        self.btn_qr.setCheckable(True)
+        self.btn_token.setChecked(True)
         group = QButtonGroup(self)
         group.addButton(self.btn_sms)
         group.addButton(self.btn_token)
+        group.addButton(self.btn_qr)
         group.setExclusive(True)
         self.btn_sms.clicked.connect(lambda: self._set_mode(False))
         self.btn_token.clicked.connect(lambda: self._set_mode(True))
+        self.btn_qr.clicked.connect(self._set_qr_mode)
         seg.addWidget(self.btn_sms)
         seg.addWidget(self.btn_token)
+        seg.addWidget(self.btn_qr)
         col.addLayout(seg)
 
         self.hint = QLabel()
@@ -116,6 +126,7 @@ class LoginWindow(QWidget):
         col.addWidget(self.hint)
 
         self.error = QLabel()
+        self.error.setTextFormat(Qt.TextFormat.PlainText)
         self.error.setWordWrap(True)
         self.error.setStyleSheet(
             "background: rgba(229,72,77,0.12); color:#E5484D;"
@@ -140,10 +151,22 @@ class LoginWindow(QWidget):
         self.pw.returnPressed.connect(self._primary)
         col.addWidget(self.pw)
 
-        self.token = QPlainTextEdit()
-        self.token.setPlaceholderText("Вставьте auth-token из web.max.ru…")
-        self.token.setFixedHeight(110)
+        self.token = QLineEdit()
+        self.token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.token.setPlaceholderText("Токен WEB-сессии MAX")
+        self.token.setObjectName('WebSessionToken')
+        self.token.returnPressed.connect(self._primary)
         col.addWidget(self.token)
+
+        self.device_id = QLineEdit()
+        self.device_id.setPlaceholderText('ID устройства из экспорта (UUID)')
+        self.device_id.setObjectName('WebSessionDeviceId')
+        col.addWidget(self.device_id)
+
+        self.import_session = QPushButton('Импортировать файл сессии…')
+        self.import_session.setObjectName('ImportWebSessionButton')
+        self.import_session.clicked.connect(self._import_session)
+        col.addWidget(self.import_session)
 
         self.primary = QPushButton("Получить код")
         self.primary.setObjectName("Primary")
@@ -155,6 +178,11 @@ class LoginWindow(QWidget):
         self.resend.clicked.connect(self._resend)
         col.addWidget(self.resend)
 
+        self.qr_panel = QrLoginPanel(self.settings, self)
+        self.qr_panel.authorized.connect(self._qr_authorized)
+        self.qr_panel.hide()
+        col.addWidget(self.qr_panel)
+
         center.addWidget(card)
         center.addStretch(1)
         root.addLayout(center)
@@ -163,14 +191,32 @@ class LoginWindow(QWidget):
     # ───────────────────────── state rendering ─────────────────────────
 
     def _set_mode(self, token_mode: bool) -> None:
+        self._mode_qr = False
+        self.qr_panel.deactivate()
         self._mode_token = token_mode
         self._step = _Step.PHONE
         self._set_error(None)
         self._render()
 
+    def _set_qr_mode(self) -> None:
+        self._mode_qr = True
+        self._set_error(None)
+        self._render()
+        self.qr_panel.activate()
+
     def _render(self) -> None:
+        self.qr_panel.setVisible(self._mode_qr)
+        self.hint.setVisible(not self._mode_qr)
+        self.primary.setVisible(not self._mode_qr)
+        if self._mode_qr:
+            for widget in (self.token, self.device_id, self.import_session, self.phone,
+                           self.code, self.pw, self.resend):
+                widget.hide()
+            return
         token = self._mode_token
         self.token.setVisible(token)
+        self.device_id.setVisible(token)
+        self.import_session.setVisible(token)
         self.phone.setVisible(not token and self._step == _Step.PHONE)
         self.code.setVisible(not token and self._step == _Step.CODE)
         self.pw.setVisible(not token and self._step == _Step.TWOFA)
@@ -178,8 +224,8 @@ class LoginWindow(QWidget):
 
         if token:
             self.hint.setText(
-                "Вставьте auth-token аккаунта MAX (web.max.ru → DevTools → "
-                "Application → хранилище). SMS не нужен."
+                "Импортируйте сохранённую WEB-сессию или укажите её токен и ID устройства. "
+                "Для входа сервер должен принять токен."
             )
             self.primary.setText("Войти по токену")
         elif self._step == _Step.PHONE:
@@ -197,6 +243,11 @@ class LoginWindow(QWidget):
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         self.primary.setDisabled(busy)
+        self.btn_sms.setDisabled(busy)
+        self.btn_token.setDisabled(busy)
+        self.btn_qr.setDisabled(busy)
+        self.import_session.setDisabled(busy)
+        self.resend.setDisabled(busy)
         self.primary.setText("…" if busy else self.primary.text())
         if not busy:
             self._render()
@@ -283,15 +334,51 @@ class LoginWindow(QWidget):
         )
 
     def _do_token(self) -> None:
-        token = self.token.toPlainText().strip()
-        if len(token) < 20:
+        token = self.token.text().strip()
+        if len(token) < 100:
             self._set_error("Токен выглядит слишком коротким.")
             return
+        device_id = self.device_id.text().strip() or None
+        if device_id is not None:
+            try:
+                device_id = str(uuid.UUID(device_id))
+            except ValueError:
+                self._set_error('Укажите UUID устройства из исходного экспорта.')
+                return
         self._set_busy(True)
+        self._watchdog.start()
         run_async(
             self.service.login_with_token, token,
+            device_id=device_id,
             on_done=lambda _: self._emit_ok(), on_error=self._on_fail,
         )
+
+    def _qr_authorized(self, authorization) -> None:
+        self._set_busy(True)
+        self._watchdog.start()
+        run_async(self.service.login_with_token, authorization.token,
+                  device_id=authorization.device_id, expected_profile_id=authorization.profile_id,
+                  on_done=lambda _: self._emit_ok(), on_error=self._on_fail)
+
+    def closeEvent(self, event) -> None:
+        self.qr_panel.deactivate()
+        super().closeEvent(event)
+
+    def _import_session(self) -> None:
+        if self._busy:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, 'Импорт WEB-сессии MAX', '', 'Сессия JSON (*.json)')
+        if not path:
+            return
+        try:
+            session = read_web_session(path)
+        except (ValueError, OSError):
+            self._set_error('Не удалось прочитать сессию. Нужен локальный JSON с токеном и deviceId.')
+            return
+        self.token.setText(session.token)
+        self.device_id.setText(session.device_id)
+        self._set_error(None)
+        self.hint.setText('Файл сессии прочитан. Нажмите «Войти по токену».')
 
     def _emit_ok(self) -> None:
         self._watchdog.stop()
@@ -303,10 +390,9 @@ class LoginWindow(QWidget):
         if not self._busy:
             return
         self.service.log("login_window: WATCHDOG fired (login chain stuck)")
-        self._set_busy(False)
         self._set_error(
-            "Вход занял слишком долго и был прерван. Проверьте сеть/VPN и "
-            "попробуйте снова."
+            "Ответ сервера задерживается. Ожидаем завершения текущей попытки; "
+            "повторный вход пока недоступен."
         )
 
     def _resend(self) -> None:
@@ -319,6 +405,8 @@ class LoginWindow(QWidget):
 
     def _on_fail(self, message: str) -> None:
         self._watchdog.stop()
-        self.service.log(f"login_window: login failed: {message}")
+        self.service.log('login_window: login failed')
         self._set_busy(False)
         self._set_error(message)
+        if self._mode_qr:
+            self.qr_panel.authentication_failed(message)

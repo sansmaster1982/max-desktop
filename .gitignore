@@ -1,29 +1,41 @@
-# Сборка
-build/
-dist/
-*.spec
-__pycache__/
-*.pyc
-*.pyo
-
-# Бинарь публикуется в GitHub Releases, не в git
-*.exe
-
-# Локальные данные клиента (на всякий случай — реально лежат в %APPDATA%)
-*.log
+# User state and credentials
+.local/
+.test-tmp/
+*.session
+*.session-journal
+*.sqlite
+*.sqlite3
 *.db
-session.json
-settings.json
-max_auth_token.txt
-debug.log
+*.db-wal
+*.db-shm
+*.log
+.env
+.env.*
+!.env.example
+tokens/
+tokens.zip
+login_details.txt
+max_token_session*.json
 
-# Внутренний план разработки (не для публичного репозитория)
-OPTIMIZATION_PLAN.md
-diag.bat
-
-# Окружение/IDE
+# Python and build products
+__pycache__/
+*.py[cod]
 .venv/
 venv/
+.pytest_cache/
+build/
+dist/
+*.exe
+*.zip
+*.spec
+!tools/MAXIM.spec
+artifacts/
+coverage.xml
+.coverage
 .idea/
 .vscode/
-*.egg-info/
+
+# Private research and local captures are not distributable by default
+research/
+captures/
+outputs/

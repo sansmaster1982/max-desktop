@@ -8,30 +8,37 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from .appearance import chat_font_scale, chat_theme, theme_scheme
+from .i18n import normalize_language
 
 APP_DIR_NAME = "MAX Desktop"
 
 
 class AppPaths:
     def __init__(self) -> None:
-        base = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
-        self.dir = Path(base) / APP_DIR_NAME
+        override = os.environ.get("MAX_DESKTOP_DATA_DIR")
+        if override:
+            # A separate working copy can keep its data inside the workspace
+            # without changing the original installation's APPDATA files.
+            self.dir = Path(override).expanduser()
+        else:
+            base = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
+            self.dir = Path(base) / APP_DIR_NAME
         self.dir.mkdir(parents=True, exist_ok=True)
         self.settings_file = self.dir / "settings.json"
         self.session_file = self.dir / "session.json"
         self.token_file = self.dir / "max_auth_token.txt"
-        # deviceId — отдельный файл: пишется один раз и НЕ удаляется при выходе,
-        # чтобы для сервера это всегда было одно и то же устройство (смена
-        # deviceId = сигнал «новое устройство» для антифрода).
+        # Persist the installation UUID across launches. Its server-side
+        # fingerprint/anti-abuse interpretation has not been established.
         self.device_file = self.dir / "device_id.txt"
-        # Профиль устройства для userAgent (модель/экран/osVersion). Если он
-        # захардкожен одинаково у всех инсталляций — антифрод кластеризует все
-        # номера этого клиента в один отпечаток. Поэтому фиксируем стабильный,
-        # но варьирующийся на установку профиль (детерминирован из deviceId).
+        # Historical Android compatibility profile, deterministic per UUID.
+        # This is not evidence of native desktop identity parity.
         self.device_profile_file = self.dir / "device_profile.json"
         self.db_file = self.dir / "cache.db"
         self.media_dir = self.dir / "media"
@@ -40,10 +47,14 @@ class AppPaths:
 
 @dataclass
 class Settings:
-    theme: str = "dark"                 # dark | light
+    theme: str = "system"               # system | light | dark (local preference)
+    chat_theme: str = "space"
+    chat_font_scale: str = "large"
     accent: str = "#2B7FFF"             # фирменный синий
     app_version: str = "26.15.0"
+    web_app_version: str = "26.10.11"
     locale: str = "ru"
+    ui_language: str = "ru"            # local interface only; independent of transport locale
     send_on_enter: bool = True
     notifications: bool = True
     download_dir: str = ""              # пусто -> media_dir
@@ -52,9 +63,17 @@ class Settings:
 
     _path: Optional[Path] = field(default=None, repr=False, compare=False)
 
+    def __post_init__(self) -> None:
+        self.theme = theme_scheme(self.theme)
+        self.chat_theme = chat_theme(self.chat_theme)
+        self.chat_font_scale = chat_font_scale(self.chat_font_scale)
+        self.ui_language = normalize_language(self.ui_language)
+
     @classmethod
     def load(cls, paths: AppPaths) -> "Settings":
         data = _read_json(paths.settings_file)
+        if not isinstance(data, dict):
+            data = {}
         known = {f for f in cls.__dataclass_fields__ if not f.startswith("_")}
         clean = {k: v for k, v in data.items() if k in known}
         obj = cls(**clean)
@@ -68,6 +87,80 @@ class Settings:
             return
         data = {k: v for k, v in asdict(self).items() if not k.startswith("_")}
         _write_json(self._path, data)
+
+    def save_ui_language(self, language: str) -> None:
+        """Atomically persist only the UI language; expose failure to its picker.
+
+        The generic legacy save helper intentionally remains unchanged. Existing
+        settings, including unknown future fields and transport locale, survive.
+        """
+        language = normalize_language(language)
+        if self._path is None:
+            self.ui_language = language
+            return
+        path = Path(self._path)
+        if path.exists():
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(data, dict):
+                raise ValueError('Invalid local settings document')
+        else:
+            data = {key: value for key, value in asdict(self).items() if not key.startswith('_')}
+        data['ui_language'] = language
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
+                                             prefix=path.name + '.ui-', suffix='.tmp', delete=False) as handle:
+                temporary = Path(handle.name)
+                json.dump(data, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink()
+                except OSError:
+                    pass
+        self.ui_language = language
+
+    def save_notifications(self, enabled: bool) -> None:
+        """Commit local delivery atomically before changing its runtime value.
+
+        Unlike legacy save(), errors propagate to the notification switch. Only
+        this field is changed in an existing settings file, including unknown
+        future fields. A missing storage binding cannot claim persistence.
+        """
+        if type(enabled) is not bool:
+            raise ValueError('Notification delivery must be a boolean')
+        if self._path is None:
+            raise ValueError('Local settings storage is not configured')
+        path = Path(self._path)
+        if path.exists():
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(data, dict):
+                raise ValueError('Invalid local settings document')
+        else:
+            data = {key: value for key, value in asdict(self).items() if not key.startswith('_')}
+        data['notifications'] = enabled
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
+                                             prefix=path.name + '.notifications-', suffix='.tmp',
+                                             delete=False) as handle:
+                temporary = Path(handle.name)
+                json.dump(data, handle, ensure_ascii=False, indent=2, allow_nan=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink()
+                except OSError:
+                    pass
+        self.notifications = enabled
 
 
 @dataclass
@@ -107,6 +200,15 @@ class Session:
         self.token_kind = kind
         self.save()
 
+    def set_device_id(self, device_id: str) -> None:
+        """Persist an imported UUID only after the caller confirmed its login."""
+        canonical = str(uuid.UUID(device_id))
+        if self._paths is not None:
+            temporary = self._paths.device_file.with_suffix(".tmp")
+            temporary.write_text(canonical, encoding="utf-8")
+            temporary.replace(self._paths.device_file)
+        self.device_id = canonical
+
     def clear_token(self) -> None:
         self.token = None
         self.my_user_id = None
@@ -137,10 +239,8 @@ class Session:
         _write_json(self._paths.session_file, meta)
 
 
-# Реальные, самосогласованные Android-устройства (model code / экран / API).
-# Все современные — arm64-v8a. Захардкоженный одинаковый UA (deviceName="Android",
-# screen=1080x2340 у ВСЕХ) — кластеризуемый отпечаток «один сторонний клиент».
-# На установку выбираем СТАБИЛЬНЫЙ профиль детерминированно из deviceId.
+# Historical Android model/screen profiles, stable per installation UUID.
+# Their effect on server-side identification has not been validated.
 _ANDROID_DEVICES = [
     {"deviceName": "SM-G991B", "screen": "1080x2400", "osVersion": "34"},   # Galaxy S21
     {"deviceName": "SM-G996B", "screen": "1080x2400", "osVersion": "34"},   # Galaxy S21+

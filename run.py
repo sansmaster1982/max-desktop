@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Запуск MAX Desktop: python run.py"""
+"""Запуск MAXIM: python run.py"""
 import sys
 from pathlib import Path
 
