@@ -6,9 +6,11 @@ from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QVBoxLayout, QWidget
 
+from . import __app_id__, __app_name__
 from .core.config import AppPaths, Session, Settings
+from .core.instance_lock import AlreadyRunning, DataDirectoryLock, InstanceLockError
 from .core.service import MaxService
 from .ui.assets import app_icon, logo_pixmap
 from .ui.async_runner import run_async
@@ -17,10 +19,15 @@ from .ui.main_window import MainWindow
 from .ui.theme import build_stylesheet
 
 
+# Service.shutdown() is not a barrier for every asynchronous job. Keep ownership
+# until process teardown, including startup failure, logout and window changes.
+_PROCESS_DIRECTORY_LOCKS: list[DataDirectoryLock] = []
+
+
 class _Splash(QWidget):
     def __init__(self, accent: str) -> None:
         super().__init__()
-        self.setWindowTitle("MAX Desktop")
+        self.setWindowTitle(__app_name__)
         self.resize(560, 720)
         lay = QVBoxLayout(self)
         lay.addStretch(1)
@@ -29,7 +36,7 @@ class _Splash(QWidget):
         if pix is not None:
             logo.setPixmap(pix)
         else:
-            logo.setText("MAX")
+            logo.setText(__app_name__)
             logo.setFixedSize(84, 84)
             logo.setStyleSheet(
                 f"background:{accent}; color:white; border-radius:24px;"
@@ -44,16 +51,38 @@ class _Splash(QWidget):
         lay.addStretch(2)
 
 
+def _set_windows_app_identity() -> bool:
+    """Group MAXIM windows separately on the taskbar; never changes stored data."""
+    if sys.platform != 'win32':
+        return False
+    try:
+        import ctypes
+        set_id = ctypes.WinDLL('shell32').SetCurrentProcessExplicitAppUserModelID
+        set_id.argtypes = [ctypes.c_wchar_p]
+        set_id.restype = ctypes.c_long
+        return set_id(__app_id__) == 0
+    except (AttributeError, OSError):
+        return False
+
+
 class MaxApp:
     def __init__(self) -> None:
-        self.paths = AppPaths()
+        _set_windows_app_identity()
+        if QApplication.instance() is None:
+            QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+        self.app = QApplication.instance() or QApplication(sys.argv)
+        self.app.setApplicationName(__app_name__)
+        self.app.setWindowIcon(app_icon())
+        try:
+            self.paths = AppPaths()
+        except OSError:
+            raise InstanceLockError('Data directory is unavailable') from None
+        self._instance_lock = DataDirectoryLock.acquire(self.paths.dir)
+        _PROCESS_DIRECTORY_LOCKS.append(self._instance_lock)
         self.settings = Settings.load(self.paths)
         self.session = Session.load(self.paths)
         self.service = MaxService(self.paths, self.settings, self.session)
 
-        self.app = QApplication.instance() or QApplication(sys.argv)
-        self.app.setApplicationName("MAX Desktop")
-        self.app.setWindowIcon(app_icon())
         self.app.setStyle("Fusion")
         self.app.setFont(QFont("Segoe UI", 10))
         self.apply_theme()
@@ -61,9 +90,19 @@ class MaxApp:
         self._login: Optional[LoginWindow] = None
         self._main: Optional[MainWindow] = None
         self._splash: Optional[_Splash] = None
+        self._prefer_qr = '--qr' in sys.argv
+        self.app.styleHints().colorSchemeChanged.connect(self._system_theme_changed)
 
     def apply_theme(self) -> None:
         self.app.setStyleSheet(build_stylesheet(self.settings.theme, self.settings.accent))
+
+    def _system_theme_changed(self, _scheme) -> None:
+        if self.settings.theme != 'system':
+            return
+        if self._main is not None:
+            self._main._apply_local_theme()
+        else:
+            self.apply_theme()
 
     def start(self) -> int:
         if self.session.token:
@@ -77,18 +116,28 @@ class MaxApp:
         return self.app.exec()
 
     def _after_restore(self, ok: bool) -> None:
-        if self._splash:
-            self._splash.close()
-            self._splash = None
+        splash = self._splash
         if ok:
             self._show_main()
         else:
             self._show_login()
+            error = getattr(self.service, 'last_restore_error', None)
+            if error and self._login:
+                self._login._set_error(str(error))
+        # Keep one visible window throughout restoration. Closing the splash
+        # first can trigger QApplication's quitOnLastWindowClosed handling.
+        if splash:
+            splash.close()
+            splash.deleteLater()
+            self._splash = None
 
     def _show_login(self) -> None:
         self._login = LoginWindow(self.service, self.settings)
         self._login.logged_in.connect(self._on_logged_in)
         self._login.show()
+        if self._prefer_qr:
+            self._login.btn_qr.setChecked(True)
+            self._login._set_qr_mode()
 
     def _on_logged_in(self) -> None:
         self.service.log("app: logged_in received -> building main window")
@@ -96,12 +145,11 @@ class MaxApp:
             self._show_main()
             self.service.log("app: main window shown")
         except Exception as e:  # noqa: BLE001
-            import traceback
-            self.service.log(f"app: main window FAILED: {e!r}\n{traceback.format_exc()}")
+            self.service.log('app: main window failed: ' + type(e).__name__)
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(
                 None, "Ошибка",
-                f"Вход прошёл, но не удалось открыть главное окно:\n{e}",
+                'Вход подтверждён сервером, но не удалось открыть список чатов.',
             )
             return
         # Главное окно построено успешно — только теперь закрываем окно входа.
@@ -138,6 +186,7 @@ def _selftest() -> int:
 
     lines = []
     rc = 0
+    app = None
     try:
         app = MaxApp()
         win = LoginWindow(app.service, app.settings)
@@ -152,7 +201,6 @@ def _selftest() -> int:
             lines.append("QMediaPlayer=ok")
         QTimer.singleShot(300, app.app.quit)
         app.app.exec()
-        app.service.shutdown()
         lines.append("SELFTEST OK")
     except Exception as e:  # noqa: BLE001
         import traceback
@@ -160,6 +208,9 @@ def _selftest() -> int:
         lines.append("SELFTEST FAIL: " + repr(e))
         lines.append(traceback.format_exc())
         rc = 1
+    finally:
+        if app is not None:
+            app._cleanup()
 
     report = "\n".join(lines)
     print(report)
@@ -176,7 +227,22 @@ def _selftest() -> int:
 def main() -> int:
     if "--selftest" in sys.argv:
         return _selftest()
-    return MaxApp().start()
+    try:
+        app = MaxApp()
+    except AlreadyRunning:
+        QMessageBox.information(
+            None, __app_name__,
+            'MAXIM уже запущен с этим профилем. Откройте существующее окно приложения.',
+        )
+        return 0
+    except InstanceLockError:
+        QMessageBox.critical(
+            None, __app_name__,
+            'Не удалось защитить каталог данных MAXIM от одновременного запуска. '
+            'Проверьте доступ к каталогу и попробуйте ещё раз.',
+        )
+        return 1
+    return app.start()
 
 
 if __name__ == "__main__":

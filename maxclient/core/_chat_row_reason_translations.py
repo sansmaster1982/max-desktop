@@ -1,0 +1,13 @@
+"""Owned disabled chat-row reasons; columns en, es, pt-BR, fr, uz, be.
+
+Unmarked supplied/server reasons remain raw even if they equal a source key.
+"""
+
+CHAT_ROW_REASON_TRANSLATIONS = {
+    'Не удалось подтвердить возможность предпросмотра.': ('Preview availability could not be confirmed.', 'No se pudo confirmar la disponibilidad de la vista previa.', 'Não foi possível confirmar a disponibilidade da prévia.', 'Impossible de confirmer la disponibilité de l’aperçu.', 'Oldindan ko‘rish imkoniyati tasdiqlanmadi.', 'Не ўдалося пацвердзіць магчымасць перадпрагляду.'),
+    'Удаление этого вида чата пока не реализовано в этой сборке.': ('Deleting this type of chat is not available in this build yet.', 'Eliminar este tipo de chat aún no está disponible en esta versión.', 'A exclusão deste tipo de chat ainda não está disponível nesta versão.', 'La suppression de ce type de discussion n’est pas encore disponible dans cette version.', 'Ushbu versiyada bu turdagi chatni o‘chirish hali mavjud emas.', 'Выдаленне гэтага тыпу чата ў гэтай зборцы пакуль недаступнае.'),
+    'Не удалось подтвердить текущее состояние прочтения.': ('The current read status could not be confirmed.', 'No se pudo confirmar el estado actual de lectura.', 'Não foi possível confirmar o status atual de leitura.', 'Impossible de confirmer l’état de lecture actuel.', 'Joriy o‘qilganlik holati tasdiqlanmadi.', 'Не ўдалося пацвердзіць бягучы стан прачытання.'),
+    'Не удалось подтвердить закрепление в выбранной папке.': ('The pin status in the selected folder could not be confirmed.', 'No se pudo confirmar el estado de fijación en la carpeta seleccionada.', 'Não foi possível confirmar o status de fixação na pasta selecionada.', 'Impossible de confirmer l’état d’épinglage dans le dossier sélectionné.', 'Tanlangan papkadagi mahkamlash holati tasdiqlanmadi.', 'Не ўдалося пацвердзіць замацаванне ў выбранай папцы.'),
+    'Сначала дождитесь подтверждения текущего действия.': ('Wait for the current action to be confirmed first.', 'Primero espera la confirmación de la acción actual.', 'Primeiro, aguarde a confirmação da ação atual.', 'Attendez d’abord la confirmation de l’action en cours.', 'Avval joriy amal tasdiqlanishini kuting.', 'Спачатку дачакайцеся пацвярджэння бягучага дзеяння.'),
+    'Состояние этого действия ещё не подтверждено.': ('This action’s status has not been confirmed yet.', 'El estado de esta acción aún no se ha confirmado.', 'O status desta ação ainda não foi confirmado.', 'L’état de cette action n’est pas encore confirmé.', 'Bu amal holati hali tasdiqlanmagan.', 'Стан гэтага дзеяння яшчэ не пацверджаны.'),
+}

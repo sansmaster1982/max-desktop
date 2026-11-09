@@ -4,6 +4,8 @@ from __future__ import annotations
 import datetime
 import hashlib
 
+from ...core.i18n import tr
+
 # Приятная палитра для аватаров (как в мессенджерах — цвет от хэша).
 _AVATAR_COLORS = [
     ("#FF8A65", "#FF7043"),
@@ -91,15 +93,16 @@ def fmt_day_divider(ms: int | None) -> str:
     return s
 
 
-def human_size(num: int | None) -> str:
+def human_size(num: int | None, language='ru') -> str:
     if not num:
         return ""
     size = float(num)
     for unit in ("Б", "КБ", "МБ", "ГБ"):
         if size < 1024 or unit == "ГБ":
-            return f"{size:.0f} {unit}" if unit == "Б" else f"{size:.1f} {unit}"
+            caption = tr(unit, language)
+            return f"{size:.0f} {caption}" if unit == "Б" else f"{size:.1f} {caption}"
         size /= 1024
-    return f"{size:.1f} ГБ"
+    return f"{size:.1f} {tr('ГБ', language)}"
 
 
 def fmt_duration(ms: int | None) -> str:

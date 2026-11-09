@@ -4,7 +4,8 @@
    возвращает HTTP upload-URL.
 2. Клиент POST'ит файл (multipart) на этот URL -> сервер возвращает
    photoToken / token / fileId.
-3. Токен кладётся в attach внутри MSG_SEND (опкод 64).
+3. Токен кладётся в attach внутри MSG_SEND (опкод 64), либо в PROFILE16
+   при явном profile=True (PHOTO80; текущий web caller: photos[0].token).
 
 Точные имена полей в ответе опкода и в HTTP-ответе в декомпиле зафиксированы
 неполностью (docs/MEDIA_OPCODES.md: «поля точно не зафиксированы»), поэтому
@@ -19,6 +20,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -55,11 +57,14 @@ def upload_and_build_attach(
     duration_ms: Optional[int] = None,
     on_progress: ProgressCb = None,
     timeout: float = 120.0,
+    profile: bool = False,
 ) -> dict:
     """Залить файл и вернуть готовый attach-словарь для MSG_SEND.message.attaches.
 
     Бросает MaxUploadError на любой стадии сбоя.
     """
+    if type(profile) is not bool or (profile and kind != AttachKind.PHOTO):
+        raise ValueError("Profile upload is supported only for photos")
     if on_progress:
         on_progress(0.0)
     if not os.path.isfile(path):
@@ -69,7 +74,7 @@ def upload_and_build_attach(
 
     # 1. Запрос upload-URL нужным опкодом.
     if kind == AttachKind.PHOTO:
-        op_resp = client.request_photo_upload(count=1, profile=False)
+        op_resp = client.request_photo_upload(count=1, profile=profile)
     elif kind in (AttachKind.VIDEO, AttachKind.VIDEO_MSG):
         op_resp = client.request_video_upload(type_="VIDEO", count=1, uploader_type="VIDEO")
     elif kind == AttachKind.AUDIO:
@@ -77,9 +82,16 @@ def upload_and_build_attach(
     else:  # FILE
         op_resp = client.request_file_upload(count=1)
 
-    url = _extract_upload_url(op_resp)
+    url = (op_resp.get("url") if isinstance(op_resp, dict) else None) if profile else _extract_upload_url(op_resp)
     if not url:
-        raise MaxUploadError(f"upload URL не найден в ответе опкода: {op_resp!r}")
+        raise MaxUploadError("Сервер не выдал адрес загрузки.")
+    try:
+        target = urlsplit(url)
+        if (target.scheme != "https" or not target.hostname
+                or target.username is not None or target.password is not None):
+            raise ValueError()
+    except (ValueError, TypeError, AttributeError):
+        raise MaxUploadError("Сервер не выдал защищённый адрес загрузки.") from None
     if on_progress:
         on_progress(0.15)
 
@@ -87,18 +99,18 @@ def upload_and_build_attach(
     try:
         with open(path, "rb") as fh:
             files = {"file": (os.path.basename(path), fh)}
-            resp = requests.post(url, files=files, timeout=timeout)
-    except requests.RequestException as e:
-        raise MaxUploadError(f"HTTP send failed: {e}") from e
+            resp = requests.post(url, files=files, timeout=timeout, allow_redirects=False)
+    except requests.RequestException:
+        raise MaxUploadError("Сетевая ошибка загрузки файла.") from None
     if on_progress:
         on_progress(0.7)
 
     if not (200 <= resp.status_code < 300):
         raise MaxUploadError(f"HTTP {resp.status_code}")
 
-    parsed = _extract_token(resp.text)
+    parsed = _extract_profile_photo_token(resp.text) if profile else _extract_token(resp.text)
     if not parsed.ok:
-        raise MaxUploadError(f"токен не найден в ответе upload: {resp.text[:200]!r}")
+        raise MaxUploadError("Сервер не подтвердил результат загрузки.")
     if on_progress:
         on_progress(1.0)
 
@@ -212,6 +224,18 @@ def _extract_token(body: str) -> UploadResult:
                 file_id=_as_int(fid),
             )
     return UploadResult()
+
+
+def _extract_profile_photo_token(body: str) -> UploadResult:
+    """Current official profile producer consumes exactly photos[0].token."""
+    try:
+        decoded = json.loads(body)
+    except (ValueError, TypeError):
+        return UploadResult()
+    photos = decoded.get("photos") if isinstance(decoded, dict) else None
+    first = photos[0] if isinstance(photos, list) and photos else None
+    token = first.get("token") if isinstance(first, dict) else None
+    return UploadResult(token=token if isinstance(token, str) and token else None)
 
 
 def _as_int(v: Any) -> Optional[int]:

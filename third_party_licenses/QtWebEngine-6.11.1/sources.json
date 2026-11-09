@@ -1,0 +1,11 @@
+{
+  "status": "reference_only_excluded_from_portable_alpha",
+  "qt_version": "6.11.1",
+  "qt_source": "https://github.com/qt/qtwebengine/tree/v6.11.1",
+  "chromium_submodule_commit": "58c11ad487f8a237cf0ac71cc3e818b52db150df",
+  "complete_chromium_notices": false,
+  "files": [
+    {"file": "CHROMIUM_LICENSE.txt", "url": "https://raw.githubusercontent.com/qt/qtwebengine-chromium/58c11ad487f8a237cf0ac71cc3e818b52db150df/chromium/LICENSE"},
+    {"file": "FFMPEG_LICENSE.md", "url": "https://raw.githubusercontent.com/qt/qtwebengine-chromium/58c11ad487f8a237cf0ac71cc3e818b52db150df/chromium/third_party/ffmpeg/LICENSE.md"}
+  ]
+}

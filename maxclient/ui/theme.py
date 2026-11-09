@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
+
+from ..core.appearance import theme_scheme
+
 
 @dataclass(frozen=True)
 class Palette:
@@ -26,6 +31,9 @@ class Palette:
     selected: str
     scrollbar: str
     danger: str
+    bubble_out: str = '#DDF7FF'
+    bubble_out_text: str = '#143544'
+    chat_background: str = '#8ACDF9'
 
 
 DARK = Palette(
@@ -44,37 +52,52 @@ DARK = Palette(
     selected="#202A3D",
     scrollbar="#39414f",
     danger="#FF5C5C",
+    bubble_out="#24485F",
+    bubble_out_text="#E9F5FF",
+    chat_background="#142936",
 )
 
 LIGHT = Palette(
     name="light",
     window="#FFFFFF",
-    sidebar="#F7F8FA",
+    sidebar="#FFFFFF",
     surface="#FFFFFF",
-    surface_hi="#EEF0F3",
+    surface_hi="#F2F2F4",
     header="#FFFFFF",
-    text="#0F1620",
-    text_dim="#717A89",
-    bubble_in="#F0F2F5",
-    bubble_in_text="#0F1620",
-    border="#E6E9EE",
-    hover="#F0F2F5",
-    selected="#E8F0FE",
+    text="#17191D",
+    text_dim="#92979F",
+    bubble_in="#FFFFFF",
+    bubble_in_text="#17191D",
+    border="#E9EBEE",
+    hover="#F4F7FA",
+    selected="#EAF4FF",
     scrollbar="#C7CDD6",
     danger="#E5484D",
 )
 
 
+def resolve_theme(theme: str, *, color_scheme=None) -> str:
+    """Resolve the local System preference without overwriting that choice."""
+    selected = theme_scheme(theme)
+    if selected != 'system':
+        return selected
+    if color_scheme is None and QGuiApplication.instance() is not None:
+        color_scheme = QGuiApplication.styleHints().colorScheme()
+    # Qt may report Unknown (for example in offscreen tests). Keep that
+    # deterministic and readable; it is not evidence of an OS dark preference.
+    return 'dark' if color_scheme == Qt.ColorScheme.Dark else 'light'
+
+
 def palette_for(theme: str) -> Palette:
-    return LIGHT if theme == "light" else DARK
+    return LIGHT if resolve_theme(theme) == "light" else DARK
 
 
 def _lighten(hex_color: str, amount: int) -> str:
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    r = min(255, r + amount)
-    g = min(255, g + amount)
-    b = min(255, b + amount)
+    r = max(0, min(255, r + amount))
+    g = max(0, min(255, g + amount))
+    b = max(0, min(255, b + amount))
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
@@ -203,8 +226,8 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: tran
 QScrollBar:horizontal {{ height: 0; }}
 
 /* ── Области ── */
-#ChatArea {{ background: {p.window}; }}
-#MessageScroll {{ background: {p.window}; border: none; }}
+#ChatArea {{ background: transparent; }}
+#MessageScroll {{ background: {p.chat_background}; border: none; }}
 #InputBar {{
     background: {p.header};
     border-top: 1px solid {p.border};
@@ -264,4 +287,33 @@ QMenu {{
 }}
 QMenu::item {{ padding: 8px 28px 8px 16px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {p.selected}; }}
+
+/* Desktop shell: the narrow navigation rail and flat, full-width chat rows. */
+#NavigationRail {{ background: {p.sidebar}; border-right: 1px solid {p.border}; }}
+QPushButton#RailButton {{ background: transparent; border: none; border-radius: 0; padding: 0; }}
+QPushButton#RailButton:hover {{ background: {p.hover}; }}
+QPushButton#RailButton:disabled {{ background: transparent; }}
+#RailButton QLabel {{ background: transparent; padding: 0; }}
+#RailSeparator {{ background: {p.border}; border: none; min-height: 1px; max-height: 1px; }}
+#SidebarTitle {{ background: transparent; font-size: 19px; font-weight: 600; }}
+#SidebarHeader {{ border-bottom: none; }}
+QPushButton#SidebarIcon {{ background: transparent; padding: 0; border-radius: 8px; min-width: 30px; min-height: 32px; }}
+QPushButton#SidebarIcon:hover {{ background: {p.hover}; }}
+QPushButton#NewChatButton {{ background: {accent}; color: white; border-radius: 9px; padding: 0; min-width: 34px; min-height: 34px; }}
+QPushButton#NewChatButton:hover {{ background: {accent_hi}; }}
+QLineEdit#ChatSearch {{ background: {p.surface_hi}; border: 1px solid transparent; border-radius: 10px; padding: 7px 9px; font-size: 14px; }}
+QLineEdit#ChatSearch:focus {{ border-color: {accent}; }}
+QListWidget#ChatList {{ background: {p.sidebar}; border: none; padding: 0; outline: none; }}
+QListWidget#ChatList::item {{ padding: 0; margin: 0; border-radius: 0; }}
+QListWidget#ChatList::item:hover {{ background: {p.hover}; }}
+QListWidget#ChatList::item:selected {{ background: {p.selected}; }}
+#ChatRow, #ChatRow QLabel {{ background: transparent; border: none; padding: 0; }}
+#ChatRowTitle {{ color: {p.text}; font-size: 15px; font-weight: 500; }}
+#ChatRowPreview {{ color: {p.text_dim}; font-size: 14px; font-weight: 400; }}
+#ChatRowTime {{ color: {p.text_dim}; font-size: 11px; font-weight: 400; }}
+#ChatRow QLabel#UnreadBadge {{ background: {accent}; color: white; border-radius: 10px; font-size: 11px; font-weight: 600; }}
+#ChatRow QLabel#UnreadBadge[muted="true"] {{ background: #ADB4BC; }}
+#NoChatsHint {{ background: {p.sidebar}; color: {p.text_dim}; font-size: 14px; padding: 24px; }}
+QSplitter::handle {{ background: {p.border}; width: 1px; }}
+QSplitter::handle:hover {{ background: {accent}; }}
 """
