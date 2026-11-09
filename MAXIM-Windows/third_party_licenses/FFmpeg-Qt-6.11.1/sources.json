@@ -1,0 +1,47 @@
+[
+  {
+    "file": "LICENSE.BSD-2-Clause.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.BSD-2-Clause.txt",
+    "git_blob_sha": "5f662b354cd40cd5339d5aa05d74b15405138230"
+  },
+  {
+    "file": "LICENSE.BSD-Source-Code.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.BSD-Source-Code.txt",
+    "git_blob_sha": "c41fc42733115c89850839f7f132bfe0f15beda4"
+  },
+  {
+    "file": "LICENSE.BSL-1.0.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.BSL-1.0.txt",
+    "git_blob_sha": "2d87ab1a9fa42781f9eec80c1d29e605ad313b85"
+  },
+  {
+    "file": "LICENSE.IJG.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.IJG.txt",
+    "git_blob_sha": "761071caa4d6d9ba1bd89d541a9d9f3f6db4ca8d"
+  },
+  {
+    "file": "LICENSE.ISC.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.ISC.txt",
+    "git_blob_sha": "b9c199c98f9bec183a195a9c0afc0a2e4fcc7654"
+  },
+  {
+    "file": "LICENSE.LGPL-2.1-or-later.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.LGPL-2.1-or-later.txt",
+    "git_blob_sha": "04bb156e77d5714dc2ee29bd0a37f16532ec741c"
+  },
+  {
+    "file": "LICENSE.MIT.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.MIT.txt",
+    "git_blob_sha": "2071b23b0e08594ea6bc99ac71129ef992abf498"
+  },
+  {
+    "file": "LICENSE.Zlib.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/LICENSE.Zlib.txt",
+    "git_blob_sha": "e0e3605ba4269a62d38ef0a510d5e96c0ae009cc"
+  },
+  {
+    "file": "qt_attribution.json",
+    "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/src/3rdparty/ffmpeg/qt_attribution.json",
+    "git_blob_sha": "308f233c3525fdfdc049199c694d8648592931b4"
+  }
+]

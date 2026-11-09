@@ -1,0 +1,475 @@
+{
+  "scope": "Qt/PySide notices only; python-packages owned by separate packaging collector",
+  "files": [
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.BSD-2-Clause.txt",
+      "bytes": 1268,
+      "sha256": "f9b29fb66a48bf7c52c5b00b87610f4146922dc551619d65722ee6ceed0ec56f"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.BSD-Source-Code.txt",
+      "bytes": 1302,
+      "sha256": "4bee991507ef59dabc05b71d5404094c2bdd3f770a6cad9b52e07a1d14845681"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.BSL-1.0.txt",
+      "bytes": 1339,
+      "sha256": "ec420606b71b1336cd536c86d2f21f1671c4422dace85a42ef60c26f9c655d50"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.IJG.txt",
+      "bytes": 4245,
+      "sha256": "190d99340c13ef386c890094f3305993d3dce7bf626e86c4c7e936c8065a06ad"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.ISC.txt",
+      "bytes": 824,
+      "sha256": "e98c16cdc4b43f528e1d02aad1558cfc62a8309a115af69f36bfb1dc11f7bc3c"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.LGPL-2.1-or-later.txt",
+      "bytes": 25907,
+      "sha256": "995a0b4368133abb22784e559fd4ee662c2c31b290003ee2fe26276edb560a46"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.MIT.txt",
+      "bytes": 1079,
+      "sha256": "2c5fe99f061dbd11d58b7676c418d0d0f59d8708ac5db0ad6b68b712a8401069"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/LICENSE.Zlib.txt",
+      "bytes": 839,
+      "sha256": "4dfcff23dcece41557b99888c75f8fdfa53d013166e21ec60d35447d97acc580"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/qt_attribution.json",
+      "bytes": 3769,
+      "sha256": "bfbebbc8e4e63739042a2e37d7dec2e6259428c3c28b0d6e071a58d11b6b25ab"
+    },
+    {
+      "path": "FFmpeg-Qt-6.11.1/sources.json",
+      "bytes": 1990,
+      "sha256": "78bb51fd88a100c72b3ad954013a4ac1bd46b553e485e1c54a97a48468d3ee2e"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-android.json",
+      "bytes": 374,
+      "sha256": "3e48947da0e78a8409264c238cf396649fc17899a0d2dd13ac467e32a77b1d40"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-blake2.json",
+      "bytes": 927,
+      "sha256": "d665d9727dbcfac37901397f8d7aede01407c94f7b2a62f5cbacf32b323a2913"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-D3D12MemoryAllocator.json",
+      "bytes": 728,
+      "sha256": "7741adaa36c465634702ffea4395bf5ee39c33e1839738e33753ea36038113f9"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-double-conversion.json",
+      "bytes": 772,
+      "sha256": "67fb3317a8c01df567982d2415705048501701b8d56978266d5b5022d823ac74"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-easing.json",
+      "bytes": 472,
+      "sha256": "11228d240afdd59666dc4b7bd40db6049a7ffb300f9798033646f50cc34e3af9"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-emoji-segmenter.json",
+      "bytes": 683,
+      "sha256": "ef8a3350af601ccb91a14bc77f06ded8cb79e49ac861495ad068461238ef10dd"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-freetype.json",
+      "bytes": 5329,
+      "sha256": "b88cfcf5c6bfc67ea8b983b9ac687261a7f2a4028833aafc49db8a006ee410a9"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-gradle.json",
+      "bytes": 582,
+      "sha256": "a198b870e489331321d887b32d17585d7270f9bd0bd30a714f64e931c8f21f30"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-harfbuzz-ng.json",
+      "bytes": 1647,
+      "sha256": "a5d897379c7c728a51262b4cb504f0046ef0252177b0a3093aa9092956c46e17"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-icc.json",
+      "bytes": 776,
+      "sha256": "318c310d7ddd7e580923e334bc2712647f0ec2e93af2bb9606ad21827e62d04a"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-libjpeg.json",
+      "bytes": 860,
+      "sha256": "3a556265cbd38cab072408ca261e78537ebad7b8cae5f3214b6cb7df261d087e"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-libpng.json",
+      "bytes": 1764,
+      "sha256": "bbc7478130e84c52315a3dd5d36218ae8cacbb206b893704120711835744df8e"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-md4.json",
+      "bytes": 575,
+      "sha256": "e1862d0eb4c1827b5162ff5b6d3f2b71d4f2509106108f456a8fe3a73d80e281"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-md4c.json",
+      "bytes": 674,
+      "sha256": "15eb2ead859318db152cb2b91ec7b7dfbde7f5cf507ad093407328d62e93a0f8"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-md5.json",
+      "bytes": 447,
+      "sha256": "09ec45e4289b5cb898899e92235143397408c13f04f65b5a5e0b89919113f0c2"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-pcre2.json",
+      "bytes": 1830,
+      "sha256": "96e87f11767016dba3597f6d869245c800456ae10dd70384228722acfb7345f7"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-pixman.json",
+      "bytes": 598,
+      "sha256": "29e1bfd930e6a0f840cc633e575a8ab621b77739f286d2288c83567b18cf041f"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-rfc6234.json",
+      "bytes": 661,
+      "sha256": "8c01da986f2b1d50edca426b620bc9dcc630d9bd7a0edde387351139f37c74da"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-sha1.json",
+      "bytes": 619,
+      "sha256": "45ff2ba680c426b0943422128426de28c97b00ab518e94fb0c083d4e93c55036"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-siphash.json",
+      "bytes": 794,
+      "sha256": "ee84423c011d4ef5ed779de757032cbd66f94d7aafafbccb703d413cf7503be7"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-sqlite.json",
+      "bytes": 800,
+      "sha256": "1b72927066f16a4144b377580ac17dc68d69a58ab4c366fa333388d821dec664"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-tinycbor.json",
+      "bytes": 686,
+      "sha256": "56332703e45d961e1864329dc71f477f4645cfb78a7e65aea28927588098d765"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-VulkanMemoryAllocator.json",
+      "bytes": 700,
+      "sha256": "636804e1085068aade4f841915637d4b4fe723a51bc95f1e5c8668fbf40de114"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-wasm.json",
+      "bytes": 731,
+      "sha256": "5da01dab69e2bd3823089764721a7ae388d1177a39aa7d9a6061427f410747ff"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-wintab.json",
+      "bytes": 603,
+      "sha256": "0586b3068d310e5a7ad3ebb0773ac9bd25eb11c99aecfe82fb32e544ded59f7b"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtbase-zlib.json",
+      "bytes": 732,
+      "sha256": "6baf4a8b7a954ed6e38fc18cd1001e715613b0c1dbea88ab2c40de5e097210c2"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-dr_libs.json",
+      "bytes": 613,
+      "sha256": "2e1be8ae13303ac1899bc67c326bae70ee143917bc63aa8f0b5ba028ff523745"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-eigen.json",
+      "bytes": 820,
+      "sha256": "a2c74274a17427e15a191ab4a1bd5a3892cb253972e00cd69751a91d6b80f11e"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-ffmpeg.json",
+      "bytes": 3769,
+      "sha256": "bfbebbc8e4e63739042a2e37d7dec2e6259428c3c28b0d6e071a58d11b6b25ab"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-pffft.json",
+      "bytes": 614,
+      "sha256": "f30678f8f191d6fc3730e019d99d52a74f86b08fb57c57b1b3d34105f078c0e2"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-resonance-audio.json",
+      "bytes": 746,
+      "sha256": "9067decd172b11227bb9ac20961cecddb192cb2f13db340ba65a19072e469fa3"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-signalsmith-stretch.json",
+      "bytes": 773,
+      "sha256": "4498394e2311012eb4ed2c31d975d0ff2af07214e6581b811a90999812c0817f"
+    },
+    {
+      "path": "Qt-6.11.1/attributions/qt_qtmultimedia-tlsf.json",
+      "bytes": 642,
+      "sha256": "5407aa4a8c90333e0ceebce8b58f9b5141b9c74e6a096c1e835ec1807ae3dc6b"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Apache-2.0.txt",
+      "bytes": 10399,
+      "sha256": "75c1ad8f852aa7b211faccf0fdb14f4f89843a447948f459059ba0125af3817c"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-BSD-3-Clause.txt",
+      "bytes": 1479,
+      "sha256": "b357d9b451099bf8b4e35b61ce9fb856aa7f0d5ca5c7066dc267f953033822e3"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt",
+      "bytes": 22956,
+      "sha256": "f93f46e78cdb8ab03c80cf7744d9fcb47ff98461819987e171d6a85cc4b291b7"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt",
+      "bytes": 18093,
+      "sha256": "640d90f6ee401241ff62834d0d1b33f83049e99b8bfdfa04ed1b0a1635dde3e7"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt",
+      "bytes": 35148,
+      "sha256": "0ae0485a5bd37a63e63603596417e4eb0e653334fa6c7f932ca3a0e85d4af227"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt",
+      "bytes": 7652,
+      "sha256": "97628afebc60f026f5c2b25d7491c46a5c4ee61f693e7cfa07fbd2c03605979b"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt",
+      "bytes": 463,
+      "sha256": "3cb8f919edf73e3b4bcbbaa6525ecfcf1e94a2bc6adb4e17836f8b1ab4883f31"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Qt-GPL-exception-1.0.txt",
+      "bytes": 966,
+      "sha256": "9f3e3c22996c64f0269d4ccdae7fb1045f4761cdc835f83555f37a64f3a4b4bf"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-AFL-2.1.txt",
+      "bytes": 8949,
+      "sha256": "65d310b79b7f7ce9a1f0d9fed0586df59b9fe387b4f11ba13c7764282f782cd7"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Bitstream-Vera.txt",
+      "bytes": 8817,
+      "sha256": "b2be899f9dd286da6715a2ac74c36011d8a76511e75ef71aa8920ac7bc8457fc"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-blessing.txt",
+      "bytes": 245,
+      "sha256": "1111ca7b212dbf3833a5367d5a7e9bd42300708f1ed85a1c344977b2340d48f9"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-2-Clause.txt",
+      "bytes": 1277,
+      "sha256": "b5e22a7a1d0d89a3ae11cfae3fd0856f0b10bb65d5a19804129e0ac0424209c0"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt",
+      "bytes": 1470,
+      "sha256": "192bc9c7d6acb8e86f81bacedb07bc25cc4b76b54d998863aa958b2a317a8ccb"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-4-Clause.txt",
+      "bytes": 1673,
+      "sha256": "b3e0aca48f8dc9c91b62c6b3db65349a6bdfe833c67776227922de2a2c8d4762"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-BSL-1.0.txt",
+      "bytes": 1341,
+      "sha256": "dc158efcb99966ec9d6f61981653ca22bf92814781b34474a55ccfbbe4b3541a"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-CC0-1.0.txt",
+      "bytes": 7049,
+      "sha256": "7179683e8000e6bdc9bbc60d85edf0a4ac8e76f951857f54fcb775d5886f1309"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-FTL.txt",
+      "bytes": 6744,
+      "sha256": "21878c9be611eecf3f936301e277f77719c14316a5132c0877c4d0dc54e5470c"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-HPND.txt",
+      "bytes": 1189,
+      "sha256": "ac8a232ed9c6376b9ed5b5427e34c46127d55be3ebc3874daa1c42238d65da86"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-IJG.txt",
+      "bytes": 1816,
+      "sha256": "113a5cabe9526ed9970b19e421ec9a3c18af721f7e79b75272ba2d75067ab4f6"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Imlib2.txt",
+      "bytes": 1987,
+      "sha256": "e38c607cfa083a467c56dd113ff198cedbd8ad3ffa7276522dac1d0095be78ea"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-IPL-1.0.txt",
+      "bytes": 11790,
+      "sha256": "feae7024b0640e3a7fde56ac3fe70b4bbdb8cb039c395a031a47a925d93cc36a"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-LGPL-2.1-or-later.txt",
+      "bytes": 25907,
+      "sha256": "995a0b4368133abb22784e559fd4ee662c2c31b290003ee2fe26276edb560a46"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-libpng-2.0.txt",
+      "bytes": 5346,
+      "sha256": "5c32e117e352998421ed8c34d1bd8aa29e74a35f4322e54d36afa38d0a23b95c"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Libpng.txt",
+      "bytes": 4121,
+      "sha256": "f8ef4f6025d5e2877c0fc37d7fa4d9a89c039f6977d5e3a021e521777e5faae6"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+      "bytes": 1853,
+      "sha256": "ffbfc6cc4c654693cce6fce8ed1805e00bd5a951667bcda7dda2d26df808e660"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-ICC-License.txt",
+      "bytes": 464,
+      "sha256": "afe5c9ba04e6f4afefd3156f0669df040db33559373d8cf74001cfe6026ad995"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-Lcs-Telegraphics.txt",
+      "bytes": 140,
+      "sha256": "311acca63065e235b8de67565f62b78a68792541095db912dbb7c9849dfe37fa"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-SHA1-Public-Domain.txt",
+      "bytes": 145,
+      "sha256": "0ecb17984ddd47038eea6531c4c0665f2c82c1da1d4d19805f7af03293172613"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Linux-syscall-note.txt",
+      "bytes": 625,
+      "sha256": "cf87ef8225f391861813ca84513750286fe5305fd44ce2b612765f91c221a117"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-MIT-Khronos-old.txt",
+      "bytes": 1307,
+      "sha256": "25c19fd363cc2f4dada334b5415f9d470db61db5d05afd633441c3920b0dc848"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-MIT-open-group.txt",
+      "bytes": 898,
+      "sha256": "6165bf0958da3eedd1f5663c08d35bc73e615002e6f0cba7940506646c5b08ba"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-MIT.txt",
+      "bytes": 1112,
+      "sha256": "36df154912b1262e7c602bb15a23a43e66713d6816272f377f5c89f74995b51d"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-MPL-2.0.txt",
+      "bytes": 16727,
+      "sha256": "d8d2562a7cb68ffdfe91fc66af1ed4a8a4e272aa4ab59bea7451ba34b9aba3d4"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-SPL-1.0.txt",
+      "bytes": 23548,
+      "sha256": "4b50716cdfa652ad641092942c23173335315d192c5fcc9374dadc81b3dc1fba"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Unicode-3.0.txt",
+      "bytes": 1996,
+      "sha256": "f5262b1a3eada6a00b5458f0660d7c1668f1976e2b7bb5db2f263f61fae333e6"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-X11.txt",
+      "bytes": 1339,
+      "sha256": "0d60c70263a66ff0c19d569e66894e5cc0dc65fc7692eac2cf76cf4f233d10b5"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Xerox.txt",
+      "bytes": 966,
+      "sha256": "15ce527325ee7616c0eb302cc714921c7c854d68cb0ef00758730efe120bfb2b"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtbase-Zlib.txt",
+      "bytes": 1466,
+      "sha256": "a11363eabb2f1003cda568b934a10db8d23a60364b0d170464027f7b96582ace"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtdeclarative-CC-BY-3.0.txt",
+      "bytes": 19468,
+      "sha256": "129ee83be4405a5bfb8cd9084848a023c83041f786adf4c8a027d32e0bf11567"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtdeclarative-OFL-1.1.txt",
+      "bytes": 4600,
+      "sha256": "82585c35736ce06aae32a5678143b93b4714ac1a670f72f0aea9effefbb6f20c"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtdeclarative-Unlicense.txt",
+      "bytes": 1149,
+      "sha256": "749d6fd2c2a1235a70464cf93e129ad84f49c0378cad7b0497b57298483fcf5c"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtmultimedia-MIT-0.txt",
+      "bytes": 923,
+      "sha256": "736a492ec08ce83ecbe1369cd7ef7223946147cf777607f5d700afb24b72575e"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtmultimedia-MPL-2.0.txt",
+      "bytes": 16728,
+      "sha256": "1a389c0a135f37855baa2fb879f86ed111d7facf8b0d5188330b35a22c4428a1"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtsvg-HPND-sell-variant.txt",
+      "bytes": 1186,
+      "sha256": "77b0a7398ecbf433213ccb7300f7320a439cd555b276e0244b128e67dfb31354"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtwebengine-LGPL-2.0-or-later.txt",
+      "bytes": 25568,
+      "sha256": "478653f7f8cbe9bd6655316f5011749a79974a7b0623cffa894268c04d80c01e"
+    },
+    {
+      "path": "Qt-6.11.1/LICENSES/qt_qtwebengine-LicenseRef-Tango-Icons-Public-Domain.txt",
+      "bytes": 76,
+      "sha256": "afbf9ae393eef4a88016d6655ec157e5bdd9434814a3571c6f98c9cb3334ea5b"
+    },
+    {
+      "path": "qt-attribution-sources.json",
+      "bytes": 9413,
+      "sha256": "32d6ceda0f8969d2b2e8e0300472f837316d11c5119e45b84251b4fd50636fbb"
+    },
+    {
+      "path": "qt-license-sources.json",
+      "bytes": 34795,
+      "sha256": "5d396439952e951d5f67bd37c2c59d2bcc01d3108261dc68c64428b5b6babe3a"
+    },
+    {
+      "path": "QtWebEngine-6.11.1/CHROMIUM_LICENSE.txt",
+      "bytes": 1537,
+      "sha256": "51b174f5dbf6859bdff0cd4d45b71c6cc21681df17ece083e487562727c81b49"
+    },
+    {
+      "path": "QtWebEngine-6.11.1/FFMPEG_LICENSE.md",
+      "bytes": 4347,
+      "sha256": "c6de7745cc11559a4f08f87ff93be05e33bfd31adfd1cb079070e994052616db"
+    },
+    {
+      "path": "QtWebEngine-6.11.1/sources.json",
+      "bytes": 630,
+      "sha256": "173aeb696c543d483c9f91d035083421e55d861eaac4fa677b049e2b84f23a3c"
+    }
+  ]
+}

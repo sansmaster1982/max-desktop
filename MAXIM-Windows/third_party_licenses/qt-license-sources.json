@@ -1,0 +1,776 @@
+{
+  "created_utc": "2026-11-09T17:18:56.319Z",
+  "version": "6.11.1",
+  "scope": "Official LICENSES directories for imported Qt module families and PySide; not a complete binary SBOM or all component copyright notices",
+  "entries": [
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Apache-2.0.txt",
+      "git_blob_sha": "136d90045663ab0acaeff2a3ecf0013c968de8c9",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/Apache-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Apache-2.0.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "23e8629f0a7706f95550633a6a3e6df57954ba68",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "pyside/pyside-setup",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Qt-GPL-exception-1.0.txt",
+      "git_blob_sha": "d0322bf0e4e1d484d35cc6a1d96fa2b65b9d579b",
+      "url": "https://raw.githubusercontent.com/pyside/pyside-setup/v6.11.1/LICENSES/Qt-GPL-exception-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Qt-GPL-exception-1.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/AFL-2.1.txt",
+      "git_blob_sha": "011d6d489bca75a655649e477efb3cb06e1c8007",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/AFL-2.1.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-AFL-2.1.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Apache-2.0.txt",
+      "git_blob_sha": "136d90045663ab0acaeff2a3ecf0013c968de8c9",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Apache-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Apache-2.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-2-Clause.txt",
+      "git_blob_sha": "7e7fb71e0fce53ef1661277c5b4503c6e049a615",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/BSD-2-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-2-Clause.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "b91bbd89468099ae5c3028f176783976ca538187",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-4-Clause.txt",
+      "git_blob_sha": "965aab0ef12f482d55d215fbf8d10595cf2a9618",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/BSD-4-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-4-Clause.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSL-1.0.txt",
+      "git_blob_sha": "9cc4741747a0f8d7e107a74cae898a69ad25fd21",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/BSL-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSL-1.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Bitstream-Vera.txt",
+      "git_blob_sha": "df52c1709bea171104d41bf084313ea434858423",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Bitstream-Vera.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Bitstream-Vera.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/CC0-1.0.txt",
+      "git_blob_sha": "0e259d42c996742e9e3cba14c677129b2c1b6311",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/CC0-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-CC0-1.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/FTL.txt",
+      "git_blob_sha": "c406d150fa57aaf7a5b950b6cf302daeba1d0bb9",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/FTL.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-FTL.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-or-later.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/GPL-2.0-or-later.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/HPND.txt",
+      "git_blob_sha": "e54a695e16e145af42c1d514edc2652596427115",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/HPND.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-HPND.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/IJG.txt",
+      "git_blob_sha": "eec5341d1c4e9ded532479684d061ffe3f6915b2",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/IJG.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-IJG.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/IPL-1.0.txt",
+      "git_blob_sha": "b779b1402a4a7c33310aa3c908f53bff5c004be4",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/IPL-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-IPL-1.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Imlib2.txt",
+      "git_blob_sha": "b8430d80a3fcf6f8facb955e2fb0b1b769615794",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Imlib2.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Imlib2.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-2.1-or-later.txt",
+      "git_blob_sha": "04bb156e77d5714dc2ee29bd0a37f16532ec741c",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LGPL-2.1-or-later.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-LGPL-2.1-or-later.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Libpng.txt",
+      "git_blob_sha": "81c1c4dd534fdd23ea97bdcfc7dcdc9cd46f3576",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Libpng.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Libpng.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+      "git_blob_sha": "9f4ae05fa5c02955713964a0f88a6bb67ad03be5",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-ICC-License.txt",
+      "git_blob_sha": "e25b1d39f1ee489362fe15dae6b01b9522735dc7",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LicenseRef-ICC-License.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-ICC-License.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Lcs-Telegraphics.txt",
+      "git_blob_sha": "6c03ad2aff71b8e39a282376bbd20179f5befbc5",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LicenseRef-Lcs-Telegraphics.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-Lcs-Telegraphics.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-SHA1-Public-Domain.txt",
+      "git_blob_sha": "2ebbf9a78ad592c705e5b6e22e20cfb8f1d11abf",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/LicenseRef-SHA1-Public-Domain.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-LicenseRef-SHA1-Public-Domain.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Linux-syscall-note.txt",
+      "git_blob_sha": "82054e66953e0ebf83c4a61bfc1deaaddf755c80",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Linux-syscall-note.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Linux-syscall-note.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT-Khronos-old.txt",
+      "git_blob_sha": "06d18a567301e6e35d4a7c5fa7b443cb1ac66ea9",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/MIT-Khronos-old.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MIT-Khronos-old.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT-open-group.txt",
+      "git_blob_sha": "8b6789ae03ca8e0791f422c4ba656faf2b1f0221",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/MIT-open-group.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MIT-open-group.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT.txt",
+      "git_blob_sha": "bc65af3cbd380a2b5e6b3f37d359d3c51ff0fa71",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/MIT.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MIT.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MPL-2.0.txt",
+      "git_blob_sha": "d0a1fa1482eea82e19510e7920cbe3a03e41f691",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/MPL-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MPL-2.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Qt-GPL-exception-1.0.txt",
+      "git_blob_sha": "d0322bf0e4e1d484d35cc6a1d96fa2b65b9d579b",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Qt-GPL-exception-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Qt-GPL-exception-1.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/SPL-1.0.txt",
+      "git_blob_sha": "55c5da3447a1e689bafe435dda2768f968f41f2e",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/SPL-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-SPL-1.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Unicode-3.0.txt",
+      "git_blob_sha": "739715c45cf49d00f3b3832cb353f8ffd385eb22",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Unicode-3.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Unicode-3.0.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/X11.txt",
+      "git_blob_sha": "e1cd1e01e60d42aa148a95f0fe318cc1a17480f6",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/X11.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-X11.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Xerox.txt",
+      "git_blob_sha": "481d3b1493661f7f04e6792c6099c2bada95279b",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Xerox.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Xerox.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Zlib.txt",
+      "git_blob_sha": "9c57e18006ec54be5d52d0bd4ff04cd5432c975f",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/Zlib.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-Zlib.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/blessing.txt",
+      "git_blob_sha": "7a1b711a6b86f81b9b3943340f9f47c5a612f2f0",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/blessing.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-blessing.txt"
+    },
+    {
+      "repository": "qt/qtbase",
+      "ref": "v6.11.1",
+      "path": "LICENSES/libpng-2.0.txt",
+      "git_blob_sha": "25f298f0fcfd8757bbd9a6386d8fcb2d644cfce9",
+      "url": "https://raw.githubusercontent.com/qt/qtbase/v6.11.1/LICENSES/libpng-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-libpng-2.0.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Apache-2.0.txt",
+      "git_blob_sha": "136d90045663ab0acaeff2a3ecf0013c968de8c9",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/Apache-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Apache-2.0.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "b91bbd89468099ae5c3028f176783976ca538187",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT-0.txt",
+      "git_blob_sha": "9c5dd0f38756ff78ab1527d9c42e6d44f1001466",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/MIT-0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtmultimedia-MIT-0.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT.txt",
+      "git_blob_sha": "bc65af3cbd380a2b5e6b3f37d359d3c51ff0fa71",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/MIT.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MIT.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MPL-2.0.txt",
+      "git_blob_sha": "ee6256cdb62a765749a71aae3abea32884301cd1",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/MPL-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtmultimedia-MPL-2.0.txt"
+    },
+    {
+      "repository": "qt/qtmultimedia",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Qt-GPL-exception-1.0.txt",
+      "git_blob_sha": "d0322bf0e4e1d484d35cc6a1d96fa2b65b9d579b",
+      "url": "https://raw.githubusercontent.com/qt/qtmultimedia/v6.11.1/LICENSES/Qt-GPL-exception-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Qt-GPL-exception-1.0.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Apache-2.0.txt",
+      "git_blob_sha": "136d90045663ab0acaeff2a3ecf0013c968de8c9",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/Apache-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Apache-2.0.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "b91bbd89468099ae5c3028f176783976ca538187",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/CC0-1.0.txt",
+      "git_blob_sha": "0e259d42c996742e9e3cba14c677129b2c1b6311",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/CC0-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-CC0-1.0.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-2.0-or-later.txt",
+      "git_blob_sha": "7d4466681742e99823744e4abb3d3a8ae0ce084f",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/LGPL-2.0-or-later.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtwebengine-LGPL-2.0-or-later.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Tango-Icons-Public-Domain.txt",
+      "git_blob_sha": "220881da67d683617ecbc1ceae14f216e8e1bfb4",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/LicenseRef-Tango-Icons-Public-Domain.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtwebengine-LicenseRef-Tango-Icons-Public-Domain.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT.txt",
+      "git_blob_sha": "bc65af3cbd380a2b5e6b3f37d359d3c51ff0fa71",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/MIT.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MIT.txt"
+    },
+    {
+      "repository": "qt/qtwebengine",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Qt-GPL-exception-1.0.txt",
+      "git_blob_sha": "d0322bf0e4e1d484d35cc6a1d96fa2b65b9d579b",
+      "url": "https://raw.githubusercontent.com/qt/qtwebengine/v6.11.1/LICENSES/Qt-GPL-exception-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Qt-GPL-exception-1.0.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "b91bbd89468099ae5c3028f176783976ca538187",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/HPND-sell-variant.txt",
+      "git_blob_sha": "9ad49316a65be2048c83c45f1f2b50420d198cbf",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/HPND-sell-variant.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtsvg-HPND-sell-variant.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtsvg",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/qt/qtsvg/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "qt/qtwebchannel",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "b91bbd89468099ae5c3028f176783976ca538187",
+      "url": "https://raw.githubusercontent.com/qt/qtwebchannel/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "qt/qtwebchannel",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/qt/qtwebchannel/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "qt/qtwebchannel",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtwebchannel/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtwebchannel",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/qt/qtwebchannel/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtwebchannel",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/qt/qtwebchannel/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtwebchannel",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/qt/qtwebchannel/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Apache-2.0.txt",
+      "git_blob_sha": "136d90045663ab0acaeff2a3ecf0013c968de8c9",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/Apache-2.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Apache-2.0.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-2-Clause.txt",
+      "git_blob_sha": "7e7fb71e0fce53ef1661277c5b4503c6e049a615",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/BSD-2-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-2-Clause.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/BSD-3-Clause.txt",
+      "git_blob_sha": "b91bbd89468099ae5c3028f176783976ca538187",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/BSD-3-Clause.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-BSD-3-Clause.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/CC-BY-3.0.txt",
+      "git_blob_sha": "1a16e05564d2aaa880bbe9e506a0a0226d8742cc",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/CC-BY-3.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtdeclarative-CC-BY-3.0.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/CC0-1.0.txt",
+      "git_blob_sha": "0e259d42c996742e9e3cba14c677129b2c1b6311",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/CC0-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-CC0-1.0.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "git_blob_sha": "857214dd84593e0bacaac0211d76de0b69f2fa18",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/GFDL-1.3-no-invariants-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GFDL-1.3-no-invariants-only.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-2.0-only.txt",
+      "git_blob_sha": "d159169d1050894d3ea3b98e1c965c4058208fe1",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/GPL-2.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-2.0-only.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/GPL-3.0-only.txt",
+      "git_blob_sha": "94a9ed024d3859793618152ea559a168bbcbb5e2",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/GPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-GPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LGPL-3.0-only.txt",
+      "git_blob_sha": "65c5ca88a67c30becee01c5a8816d964b03862f9",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/LGPL-3.0-only.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LGPL-3.0-only.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/LicenseRef-Qt-Commercial.txt",
+      "git_blob_sha": "825b1f358b1f42d762112defbf0a193c9d968488",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/LicenseRef-Qt-Commercial.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-LicenseRef-Qt-Commercial.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/MIT.txt",
+      "git_blob_sha": "bc65af3cbd380a2b5e6b3f37d359d3c51ff0fa71",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/MIT.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtbase-MIT.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/OFL-1.1.txt",
+      "git_blob_sha": "40bd8a65d5330c74be756ce4c024d1363b77675c",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/OFL-1.1.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtdeclarative-OFL-1.1.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Qt-GPL-exception-1.0.txt",
+      "git_blob_sha": "d0322bf0e4e1d484d35cc6a1d96fa2b65b9d579b",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/Qt-GPL-exception-1.0.txt",
+      "local_file": "Qt-6.11.1/LICENSES/pyside_pyside-setup-Qt-GPL-exception-1.0.txt"
+    },
+    {
+      "repository": "qt/qtdeclarative",
+      "ref": "v6.11.1",
+      "path": "LICENSES/Unlicense.txt",
+      "git_blob_sha": "44f6ecc6a219f9f5539a5eef424bd923db15c582",
+      "url": "https://raw.githubusercontent.com/qt/qtdeclarative/v6.11.1/LICENSES/Unlicense.txt",
+      "local_file": "Qt-6.11.1/LICENSES/qt_qtdeclarative-Unlicense.txt"
+    }
+  ],
+  "failures": []
+}
