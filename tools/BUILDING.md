@@ -12,7 +12,6 @@ tools under `tools/`:
 ```powershell
 py -3.11 -m venv .venv
 .venv\Scripts\python -m pip install -r tools/requirements-build.lock
-.venv\Scripts\python tools/run_public_tests.py --source . --out artifacts/test01
 .venv\Scripts\python tools/build_public.py --source . --out artifacts/build01
 ```
 
