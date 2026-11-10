@@ -65,12 +65,25 @@ def _set_windows_app_identity() -> bool:
         return False
 
 
+def disable_ui_animations() -> None:
+    """Show menus, drop-down lists and tooltips at once.
+
+    On Windows Qt follows the system "animate/fade menus" setting: every popup
+    first grabs the screen under it and then fades in for about 150 ms, which
+    reads as a lag on right-click. The original client shows menus instantly.
+    """
+    for effect in (Qt.UIEffect.UI_AnimateMenu, Qt.UIEffect.UI_FadeMenu, Qt.UIEffect.UI_AnimateCombo,
+                   Qt.UIEffect.UI_AnimateTooltip, Qt.UIEffect.UI_FadeTooltip):
+        QApplication.setEffectEnabled(effect, False)
+
+
 class MaxApp:
     def __init__(self) -> None:
         _set_windows_app_identity()
         if QApplication.instance() is None:
             QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
         self.app = QApplication.instance() or QApplication(sys.argv)
+        disable_ui_animations()
         self.app.setApplicationName(__app_name__)
         self.app.setWindowIcon(app_icon())
         try:
@@ -123,7 +136,7 @@ class MaxApp:
             self._show_login()
             error = getattr(self.service, 'last_restore_error', None)
             if error and self._login:
-                self._login._set_error(str(error))
+                self._login.show_restore_error(error)
         # Keep one visible window throughout restoration. Closing the splash
         # first can trigger QApplication's quitOnLastWindowClosed handling.
         if splash:

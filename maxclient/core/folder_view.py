@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import copy
 
-from ..protocol.folder_contracts import ALL_FOLDER, folder_dto, int64
+from ..protocol.folder_contracts import (
+    ALL_FOLDER, UNEVALUATED_FILTERS, UNEVALUATED_OPTIONS, folder_dto, int64,
+)
 
 _TYPE_FILTERS = {2, 3, 4, 8, 9, 10}
 _REQUIRED_FILTERS = {0, 1, 5, 6, 7, 11, 12, 13}
@@ -172,6 +174,9 @@ def build_folder_view(folder, chats, *, raw_chats=None, contacts=None, viewer_id
     if folder['id'] == 'chat.channel.folder':
         hidden = False  # KA.visible keeps this special folder visible.
     unsupported = [key for key in ('exclude', 'allFilterExcludeFolders') if key in folder]
+    # Newer server values MAXIM does not evaluate yet: shown as an incomplete view.
+    unsupported += [f'filters:{key}' for key in sorted(filters & UNEVALUATED_FILTERS)]
+    unsupported += [f'options:{key}' for key in sorted(set(folder.get('options', [])) & UNEVALUATED_OPTIONS)]
     return {'folderId': folder['id'], 'title': folder['title'], 'chatIds': selected,
             'unresolvedChatIds': unresolved, 'unavailableChatIds': missing, 'complete': complete,
             'unreadCount': unread, 'hidden': hidden, 'ignoredFilterIds': [14] if 14 in filters else [],

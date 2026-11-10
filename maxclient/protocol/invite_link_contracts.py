@@ -5,6 +5,10 @@ from __future__ import annotations
 INVITE_TEXT_LIMIT = 16384  # Local clipboard/UI bound, not a server-wide limit.
 
 
+class InviteLinkUnavailable(ValueError):
+    """The confirmed session has no supplied invite-long text (absent or empty)."""
+
+
 def invite_link_config(server):
     """Retain only a supplied typed invitation; empty explicitly disables it."""
     if not isinstance(server, dict):
@@ -24,5 +28,5 @@ def invite_link_text(server):
     """Return the exact source text, not a fabricated or profile-derived URL."""
     value = invite_link_config(server).get('invite-long', '')
     if not value.strip():
-        raise ValueError('MAX пока не предоставил ссылку-приглашение для этой сессии.')
+        raise InviteLinkUnavailable('MAX пока не предоставил ссылку-приглашение для этой сессии.')
     return value

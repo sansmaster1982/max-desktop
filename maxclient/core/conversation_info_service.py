@@ -180,7 +180,9 @@ class ConversationInfoServiceMixin:
                     contact = copy.deepcopy(self._server_contacts.get(peer, {})) if peer is not None else {}
                     if not isinstance(contact, dict) or contact and contact.get('id') != peer:
                         raise ConversationUnavailable('Не подтверждены сведения собеседника.')
-                    cached_contact = next((row for row in self.store.list_contacts() if row.id == peer), None)
+                    # Every currency check lands here (hundreds per chat-row
+                    # popup): read the one keyed row a full scan would find.
+                    cached_contact = self.store.get_contact(peer) if peer is not None else None
                     config = self.store.load_config(owner)
                     self._require_history_context(binding)
             return binding, chat, raw, peer, contact, cached_contact, config

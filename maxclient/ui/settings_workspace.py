@@ -1215,10 +1215,14 @@ class SettingsWorkspace(QWidget):
         QApplication.clipboard().setText(text)
 
     def _copy_invitation(self):
-        from .invite_link import copy_invitation, show_menu_notice
+        from .invite_link import (INVITE_UNAVAILABLE_NOTICE, InviteLinkUnavailable,
+                                  copy_invitation, show_menu_notice)
         try:
             context = self.service.search_context()
             copy_invitation(self.service, context=context)
+        except InviteLinkUnavailable:
+            show_menu_notice(self, self._t(INVITE_UNAVAILABLE_NOTICE))
+            return
         except (AttributeError, ValueError, RuntimeError):
             show_menu_notice(self, self._t('Не удалось скопировать приглашение. Проверьте соединение с MAX и повторите действие.'))
             return

@@ -88,6 +88,7 @@ class ContactEditPanel(QWidget):
         self._busy = False
         self._can_edit = False
         self._can_delete = False
+        self._delete_reason = None
         self.setObjectName('ContactEditPanel')
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         root = QVBoxLayout(self)
@@ -172,6 +173,13 @@ class ContactEditPanel(QWidget):
             field.setAccessibleName(tr(source, self._language))
             field.setPlaceholderText(tr(source, self._language))
         self._render_status()
+        self._render_delete_reason()
+
+    def _render_delete_reason(self):
+        """A disabled «Удалить контакт» states why, like the same menu row."""
+        source = (None if self.delete_button.isEnabled() else
+                  'Дождитесь завершения текущего действия.' if self._busy else self._delete_reason)
+        self.delete_button.setToolTip(tr(source, self._language) if isinstance(source, str) else '')
 
     def _render_status(self):
         self.status.setText(tr(self._status_source, self._language)
@@ -218,9 +226,11 @@ class ContactEditPanel(QWidget):
     def update_capabilities(self, snapshot):
         self._can_edit = snapshot.get('availability', {}).get('edit') is True
         self._can_delete = snapshot.get('availability', {}).get('delete') is True
+        self._delete_reason = contact_unavailable_reasons(snapshot).get('delete')
         self.first_name.setEnabled(self._can_edit and not self._busy)
         self.last_name.setEnabled(self._can_edit and not self._busy)
         self.delete_button.setEnabled(self._can_delete and not self._busy)
+        self._render_delete_reason()
         self._changed()
 
     def set_busy(self, busy, status='', *, status_source=None):
@@ -231,15 +241,18 @@ class ContactEditPanel(QWidget):
         self._status_text = status if isinstance(status, str) else ''
         self._status_source = status_source if isinstance(status_source, str) else None
         self._render_status()
+        self._render_delete_reason()
         self._changed()
 
     def clear(self):
         self._context = None
         self._can_edit = self._can_delete = False
+        self._delete_reason = None
         self.first_name.clear()
         self.last_name.clear()
         self.avatar.set_photo(None)
         self.delete_button.setEnabled(False)
+        self._render_delete_reason()
 
     def _changed(self, *_args):
         values = (self.first_name.text().strip(), self.last_name.text().strip())
@@ -390,6 +403,7 @@ class ContactProfileMixin:
         self._contact_snapshot = {}
         self._contact_panel = None
         self._contact_job = None
+        self._contact_refresh_job = None
         self._contact_row_menu = None
         self._contact_edit_panel = None
         self._contact_edit_after_refresh = False
@@ -612,6 +626,15 @@ class ContactProfileMixin:
                    for item in contact_menu_entries(self._contact_snapshot))
 
     def _contact_action(self, action, context):
+        if (action == 'chat' and self._contact_job is not None
+                and self._contact_job is self._contact_refresh_job and self._contact_current(context)
+                and self._contact_snapshot.get('availability', {}).get('chat') is True):
+            # The card starts a background read of the profile when it opens.
+            # "Chat" is read-only navigation with its own 32/48 reads, so that
+            # read must not swallow the click. Its late result is discarded by
+            # the job identity check; a contact write is never superseded.
+            self._contact_job = self._contact_refresh_job = None
+            self._contact_edit_after_refresh = False
         if not self._contact_current(context) or self._contact_job is not None:
             return
         if action == 'copy_phone':
@@ -721,6 +744,7 @@ class ContactProfileMixin:
         if not callable(method):
             return
         request = self._contact_job = object()
+        self._contact_refresh_job = request if action == 'refresh' else None
         editing = (self._contact_edit_panel is not None
                    and self._conversation_pages.currentWidget() is self._contact_edit_panel)
         if editing:
@@ -733,6 +757,7 @@ class ContactProfileMixin:
             if not self._contact_current(context) or self._contact_job is not request:
                 return
             self._contact_job = None
+            previous_snapshot = self._contact_snapshot  # Replaced, never mutated, below.
             if not self._accept_contact_snapshot(result, context):
                 try:
                     result = self.service.contact_snapshot(context)
@@ -761,6 +786,9 @@ class ContactProfileMixin:
             if menu is not None and isValid(menu) and menu.isVisible():
                 menu.replace_entries(contact_menu_entries(self._contact_snapshot, language=self.settings.ui_language))
             self._refresh_contact_sidebar()
-            self._schedule_reload()
+            if action != 'refresh' or failed or self._contact_snapshot != previous_snapshot:
+                # A read-only refresh that changed nothing has nothing new for the
+                # chat list; rebuilding it took about 150 ms per contact right-click.
+                self._schedule_reload()
 
         run_async(method, context, *args, on_done=done, on_error=lambda _error: done(failed=True))

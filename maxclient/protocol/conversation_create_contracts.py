@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 
+from .chat_record_maps import normalize_chat_id_maps
 from .folder_contracts import int64
 from .search_contracts import _chat, _message
 
@@ -62,6 +63,12 @@ def conversation_create_payload(values, cid):
 
 
 def _created_chat(raw, values, owner_id, *, chat_id=None):
+    # The binary decoder keeps int64 participant keys; the WEB schema used by
+    # _chat expects decimal strings. Conflicting or malformed keys still fail.
+    try:
+        raw = normalize_chat_id_maps(raw)
+    except ValueError:
+        raise ValueError('MAX не подтвердил созданный чат') from None
     if (_chat(raw) is None or raw['id'] == 0 or raw['owner'] != owner_id
             or raw['type'] != ('CHAT' if values['kind'] == 'group' else 'CHANNEL')
             or raw['status'] != 'ACTIVE' or raw.get('title') != values['title']

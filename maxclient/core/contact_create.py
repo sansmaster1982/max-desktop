@@ -27,7 +27,7 @@ class ContactCreateResult:
 
 
 class ContactCreateServiceMixin:
-    def _log_contact_creation_readback(self, reason, pending, data):
+    def _log_contact_creation_readback(self, reason, pending, data, *, differences=()):
         if reason not in ('validation_failed', 'stale_conflict', 'stale_ack_conflict', 'confirmed'):
             return
         try:
@@ -36,6 +36,11 @@ class ContactCreateServiceMixin:
             details = {'reason': reason, 'is_new': pending.get('is_new')
                        if type(pending.get('is_new')) is bool else None,
                        **_contact_readback_shape(data, identity)}
+            if reason in ('stale_conflict', 'stale_ack_conflict'):
+                # Fixed field names only: which observation part blocked32.
+                details['differences'] = [key for key in ('updateTime', 'flags', 'status', 'phone', 'names',
+                                                          'accountStatus', 'options', 'service')
+                                          if key in differences]
             rows = data.get('contacts') if isinstance(data, dict) else None
             matches = [row for row in rows if isinstance(row, dict) and type(row.get('id')) is int
                        and row['id'] == identity] if isinstance(rows, list) else []
@@ -84,15 +89,23 @@ class ContactCreateServiceMixin:
             for current, reason in observations:
                 if current is None:
                     continue
+                if (reason == 'stale_conflict' and isinstance(current, dict)
+                        and 'updateTime' not in current and type(current.get('id')) is int
+                        and current['id'] == identity):
+                    # Lookup46 caches a clockless projection, not a versioned
+                    # ContactDTO. It cannot be newer than this exact post-write
+                    # 32, so it neither blocks nor confirms; 32 replaces it.
+                    continue
                 if (not isinstance(current, dict) or not int64(current.get('updateTime'))
                         or not int64(current.get('id')) or current['id'] != identity):
-                    self._log_contact_creation_readback(reason, pending, data)
+                    self._log_contact_creation_readback(reason, pending, data, differences=('updateTime',))
                     raise MaxWriteOutcomeUnknown(UNKNOWN)
                 if current['updateTime'] > actual['updateTime']:
                     relevant = ('flags', 'status', 'phone', 'names', 'accountStatus', 'options', 'service')
-                    if any((key in current, current.get(key)) != (key in actual, actual.get(key))
-                           for key in relevant):
-                        self._log_contact_creation_readback(reason, pending, data)
+                    differences = [key for key in relevant
+                                   if (key in current, current.get(key)) != (key in actual, actual.get(key))]
+                    if differences:
+                        self._log_contact_creation_readback(reason, pending, data, differences=differences)
                         raise MaxWriteOutcomeUnknown(UNKNOWN)
                     actual = contact_create_readback({'contacts': [current]}, identity, pending['payload'],
                                                     require_name_match=pending.get('is_new') is not False)

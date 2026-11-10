@@ -91,6 +91,8 @@ class VisibleReadReceipts(QObject):
             return None
         viewport = view.scroll.viewport()
         candidates = []
+        covered = []
+        self._count_reconcile = False
         for row in view._rows:
             message, bubble = row['msg'], row['bubble']
             if (not isinstance(message, Message) or message.chat_id != view.chat.id
@@ -106,10 +108,31 @@ class VisibleReadReceipts(QObject):
                 continue
             if (_message_time({'time': state['mark']}) is not None
                     and message.time_ms <= state['mark']):
+                covered.append(message)
                 continue
             candidates.append(message)
         if not candidates:
-            return None
+            # The badge is nonzero although our confirmed marker already covers
+            # the newest server message and that message is fully on screen
+            # (a receipt that arrived without a count, or a count that a late
+            # ACK could not apply). Nothing visible is newer than the marker, so
+            # the normal path would never ask again. One explicit request for
+            # this exact frontier obtains the server's count; nothing is reset
+            # locally and the request is never repeated for the same frontier.
+            frontier = getattr(view.service, 'read_receipt_frontier', None)
+            if (not covered or state['unread'] <= 0 or state['markedAsUnread']
+                    or not callable(frontier)):
+                return None
+            selected = max(covered, key=lambda message: (message.time_ms, message.id))
+            try:
+                latest = frontier(view.chat.id, context=context)
+            except Exception:
+                return None
+            if (not isinstance(latest, tuple) or latest != (selected.id, selected.time_ms)
+                    or not view.chat_metadata_binding_current(binding)):
+                return None
+            self._count_reconcile = True
+            return binding, context, selected, state
         selected = max(candidates, key=lambda message: (message.time_ms, message.id))
         return binding, context, selected, state
 
@@ -128,6 +151,12 @@ class VisibleReadReceipts(QObject):
             self._scope = context
             self._attempted.clear()
         key = (message.chat_id, message.id, message.time_ms)
+        if getattr(self, '_count_reconcile', False):
+            # Separate single-use slot: at most one count request per frontier
+            # and session, whatever its outcome.
+            key = key + ('count',)
+            if key in self._attempted:
+                return
         if key in self._attempted:
             acknowledged = self._attempted[key]
             current_mark = _message_time({'time': state['mark']})

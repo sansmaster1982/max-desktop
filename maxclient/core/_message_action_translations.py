@@ -31,6 +31,7 @@ MESSAGE_ACTION_TRANSLATIONS = {
     'Действие отклонено': ('Action rejected', 'Acción rechazada', 'Ação recusada', 'Action refusée', 'Amal rad etildi', 'Дзеянне адхілена'),
     'Результат не подтверждён': ('Result not confirmed', 'Resultado no confirmado', 'Resultado não confirmado', 'Résultat non confirmé', 'Natija tasdiqlanmagan', 'Вынік не пацверджаны'),
     'Действие не подтверждено': ('Action not confirmed', 'Acción no confirmada', 'Ação não confirmada', 'Action non confirmée', 'Amal tasdiqlanmagan', 'Дзеянне не пацверджана'),
+    'Отправка не подтверждена': ('Sending not confirmed', 'Envío no confirmado', 'Envio não confirmado', 'Envoi non confirmé', 'Yuborish tasdiqlanmagan', 'Адпраўка не пацверджана'),
     'Удаление в Избранном': ('Deleting from Favorites', 'Eliminar de Favoritos', 'Exclusão em Favoritos', 'Suppression dans les Favoris', 'Tanlanganlardan o‘chirish', 'Выдаленне з «Выбранага»'),
     'Сессия изменилась. Откройте сообщение заново.': (
         'The session changed. Open the message again.', 'La sesión cambió. Vuelve a abrir el mensaje.',

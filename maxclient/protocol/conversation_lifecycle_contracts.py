@@ -19,6 +19,31 @@ def chat_sync_time(raw):
     return max(values)
 
 
+_READ_STATE_KEYS = frozenset({'lastMessage', 'newMessages', 'markedAsUnread'})
+
+
+def _chat_state(dto):
+    state = {key: value for key, value in dto.items() if key not in _READ_STATE_KEYS}
+    participants = state.get('participants')
+    if isinstance(participants, dict):
+        # Membership is chat state; the per-member read markers are not.
+        state['participants'] = sorted(str(key) for key in participants)
+    return state
+
+
+def same_chat_state(cached, raw):
+    """Compare a cached DTO with its own 48 readback, except for read state.
+
+    _remember_chat_info keeps a newer cached lastMessage, drops one that is
+    locally tombstoned or below a cleared-history boundary, and keeps a newer
+    confirmed own read marker with its counter. Those are not chat state; the
+    membership and every other field must still be exactly equal.
+    """
+    if not isinstance(cached, dict) or not isinstance(raw, dict):
+        return False
+    return _chat_state(cached) == _chat_state(raw)
+
+
 def build_chat_lifecycle(chat_id, last_event_time, for_all):
     if (not _integer(chat_id, 64) or not _number(last_event_time)
             or last_event_time < 0 or type(for_all) is not bool):

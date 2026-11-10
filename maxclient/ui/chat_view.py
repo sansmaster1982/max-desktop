@@ -108,6 +108,8 @@ class ChatView(QWidget):
     info_requested = Signal(object)
     file_save_requested = Signal(object)  # Bound descriptor, never a guessed URL.
     file_scope_closed = Signal(object)
+    # Worker hint: chat ID (64-bit, so not Signal(int)), captured history binding.
+    _pending_text_stored = Signal(object, object)
 
     def __init__(self, service: MaxService, settings: Settings) -> None:
         super().__init__()
@@ -137,6 +139,7 @@ class ChatView(QWidget):
         self._message_menu_generation = 0
         self._message_action_menus = weakref.WeakSet()
         self._message_dialog_retranslations = {}
+        self._pending_text_stored.connect(self._show_stored_pending, Qt.ConnectionType.QueuedConnection)
         self._build()
         self._reply_last_shortcut = QShortcut(QKeySequence('Ctrl+R'), self)
         self._reply_last_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -637,6 +640,11 @@ class ChatView(QWidget):
         if self._history_target_pending:
             self._pending_target_changes.update(changes)
         self._history_cache_revision += 1
+        target = self._reply_target
+        if (target is not None and target.chat_id == event.chat_id and target.id in changes
+                and (changes[target.id] is None or changes[target.id].status == 'removed')):
+            # A confirmed deleted source cannot be quoted; the typed draft stays.
+            self._set_reply_target(None)
         affected = [index for index, row in enumerate(self._rows) if row['msg'].id in changes]
         if not affected:
             return True
@@ -756,6 +764,8 @@ class ChatView(QWidget):
         return "t" + str(m.time_ms)
 
     def _set_messages(self, messages: list[Message]) -> None:
+        # A server-removed row stays cached but is never shown, as in a live change.
+        messages = [m for m in messages if m.status != 'removed']
         old_keys = [r["key"] for r in self._rows]
         new_keys = [self._key(m) for m in messages]
         # Общий случай: старое — префикс нового (дописали в конец) ± смена статуса.
@@ -779,7 +789,8 @@ class ChatView(QWidget):
     def _full_render(self, messages: list[Message]) -> None:
         self._clear_all()
         for m in messages:
-            self._append_row(m)
+            if m.status != 'removed':
+                self._append_row(m)
         QTimer.singleShot(0, self._scroll_to_bottom)
         receipts = getattr(self, 'read_receipts', None)
         if receipts is not None:
@@ -1218,16 +1229,35 @@ class ChatView(QWidget):
         method, args = ((self.service.reply_to_message, (chat_id, reply.id, text))
                         if reply is not None else (self.service.send_text, (chat_id, text)))
         options = {'context': binding[1]} if binding is not None else {}
+        hint = self._pending_text_stored
+        options['on_pending'] = lambda: hint.emit(chat_id, binding)
 
         def complete(message=None, error=None):
-            if isValid(self) and self._history_context_current(binding):
+            if not isValid(self):
+                return
+            if self._history_context_current(binding):
                 self._on_sent(chat_id, message, error)
+            elif self._same_account_chat(chat_id, binding):
+                self.reload()  # Same account after a reconnect: show the stored final state.
 
         run_async(
             method, *args, **options,
             on_done=complete,
             on_error=lambda error: complete(error=error),
         )
+
+    def _show_stored_pending(self, chat_id, binding):
+        """Show the stored local row while the send still waits for MAX."""
+        if (isValid(self) and self.chat is not None and self.chat.id == chat_id
+                and self._history_context_current(binding)):
+            self.reload()
+
+    def _same_account_chat(self, chat_id, binding):
+        owner = binding[2] if isinstance(binding, tuple) and len(binding) == 3 else None
+        return (self.chat is not None and self.chat.id == chat_id and type(owner) is int
+                and getattr(self.service, 'client', None) is binding[0]
+                and getattr(self.service, 'my_id', None) == owner
+                and getattr(getattr(self.service, 'store', None), 'cache_owner', owner) == owner)
 
     def _after_send(self, chat_id: int) -> None:
         if self.chat and self.chat.id == chat_id:
@@ -1238,7 +1268,10 @@ class ChatView(QWidget):
         self._after_send(chat_id)
         reason = err or (msg.error if (msg is not None and msg.status in {"failed", "unknown"}) else None)
         if reason:
-            QMessageBox.warning(self, "Сообщение не отправлено", str(reason))
+            # An unknown write may have been delivered; never call it unsent.
+            unknown = err is None and msg.status == 'unknown'
+            QMessageBox.warning(self, self._message_tr('Отправка не подтверждена') if unknown
+                                else "Сообщение не отправлено", str(reason))
 
     def _attach_menu(self) -> None:
         if self.chat is None:

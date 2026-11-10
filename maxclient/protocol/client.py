@@ -201,6 +201,11 @@ class MaxClient:
         # (мёртвый/протухший): UI должен разлогинить и показать экран входа, а
         # не висеть в «не в сети». Порт onAuthInvalid из max iso.
         self.on_auth_invalid = on_auth_invalid
+        # Why on_auth_invalid fired last: "server_logout" (server push LOGOUT
+        # 20) or "login_rejected" (reconnect LOGIN refused) with the bounded
+        # server code (e.g. login.cred) when MAX sent one. Never a credential.
+        self.auth_end_reason: Optional[str] = None
+        self.auth_end_code: Optional[str] = None
         self.on_reauthenticated = on_reauthenticated
         self.auto_reconnect = auto_reconnect
 
@@ -478,6 +483,16 @@ class MaxClient:
                 with self._send_lock:
                     sock.sendall(acknowledgement)
             return
+        if frame.cmd == 0 and frame.opcode == opcodes.LOGOUT:
+            # MAX ended this session; the official WEB client logs out at once.
+            # Only the authenticated current socket counts. Nothing is sent
+            # back and no saved file is touched here.
+            with self._reconnect_lock:
+                if (frame.auth_context is not None and incoming_socket is self._sock
+                        and self.authenticated_session is frame.auth_context):
+                    self._debug(f"server ended session: push 20 utc={_utc_stamp()}")
+                    self._auth_ended("server_logout", None, incoming_socket)
+            return
         if frame.cmd == 0 and frame.opcode == opcodes.NOTIF_MESSAGE:
             data = frame.decoded if isinstance(frame.decoded, dict) else {}
             message = data.get("message") if isinstance(data.get("message"), dict) else {}
@@ -538,6 +553,25 @@ class MaxClient:
                 self._start_reconnect()
             else:
                 self._set_state(ConnectionState.DISCONNECTED)
+
+    def _auth_ended(self, reason: str, code: Optional[str], sock) -> None:
+        """MAX ended or refused this session. Caller holds _reconnect_lock.
+
+        Drops only the in-memory token (saved files stay with the service),
+        stops the reconnect worker, tears down that socket and reports once.
+        """
+        self.auth_end_reason, self.auth_end_code = reason, code
+        self._token = None
+        self._stop_reconnect(join_timeout=0.0)
+        if sock is not None:
+            self._teardown_socket(only=sock)
+        if not self.is_connected:
+            self._set_state(ConnectionState.DISCONNECTED)
+        if self.on_auth_invalid:
+            try:
+                self.on_auth_invalid()
+            except Exception:
+                pass
 
     # ───────────────────────── keepalive ─────────────────────────
 
@@ -768,7 +802,7 @@ class MaxClient:
                     if not self.is_connected:
                         self._set_state(ConnectionState.DISCONNECTED)
                 return
-            except MaxLoginFailed:
+            except MaxLoginFailed as error:
                 # Токен мёртв — нет смысла долбить сервер протухшим токеном.
                 # ОБЯЗАТЕЛЬНО рвём уже поднятый (connect успел) сокет, иначе
                 # keepalive пинговал бы неавторизованное соединение (аномальный
@@ -779,21 +813,11 @@ class MaxClient:
                     # its reconnect worker, even when that worker is running.
                     if self._reconnect_stop is not ev:
                         return
-                    self._debug("reconnect aborted: saved credential rejected")
-                    active = self._reconnect_running
-                    if active:
-                        self._token = None
-                        self._stop_reconnect(join_timeout=0.0)
-                    if my_sock is not None:
+                    self._debug(f"reconnect aborted: saved credential rejected utc={_utc_stamp()}")
+                    if self._reconnect_running:
+                        self._auth_ended("login_rejected", getattr(error, "server_code", None), my_sock)
+                    elif my_sock is not None:
                         self._teardown_socket(only=my_sock)
-                    if active:
-                        if not self.is_connected:
-                            self._set_state(ConnectionState.DISCONNECTED)
-                        if self.on_auth_invalid:
-                            try:
-                                self.on_auth_invalid()
-                            except Exception:
-                                pass
                 return
             except Exception as e:  # noqa: BLE001
                 if self._reconnect_stop is not ev:
@@ -966,7 +990,11 @@ class MaxClient:
                 "Результат входа не подтверждён. Повторный запрос не отправлен."
             ) from None
         if frame.cmd == 3 and frame.opcode == opcode:
-            raise MaxLoginFailed(f"{opcodes.name(opcode)}: {frame.error_text()}")
+            code = frame.error_text()
+            error = MaxLoginFailed(f"{opcodes.name(opcode)}: {code}")
+            # Bounded server code (e.g. login.cred) for the UI, when MAX sent one.
+            error.server_code = None if code == "server_rejected_request" else code
+            raise error
         if frame.cmd != 1 or frame.opcode != opcode:
             raise MaxWriteOutcomeUnknown("MAX не подтвердил ожидаемый ответ входа.")
         return frame
@@ -2183,6 +2211,11 @@ class MaxClient:
 
 def _is_bounded_qr_string(value, *, limit: int = 4096) -> bool:
     return isinstance(value, str) and 0 < len(value) <= limit
+
+
+def _utc_stamp() -> str:
+    """UTC time for auth-ended debug lines: fixed format, no account data."""
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 def _has_profile_identity(profile) -> bool:

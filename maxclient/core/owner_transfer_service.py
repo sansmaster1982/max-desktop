@@ -13,7 +13,8 @@ import weakref
 
 from ..protocol.client import MaxError, MaxWriteNotStarted, MaxWriteOutcomeUnknown
 from ..protocol.owner_transfer_contracts import parse_owner_transfer_ack
-from ..protocol.conversation_lifecycle_contracts import chat_sync_time, lifecycle_readback, parse_leave_ack
+from ..protocol.conversation_lifecycle_contracts import (chat_sync_time, lifecycle_readback, parse_leave_ack,
+                                                         same_chat_state)
 from ..protocol.search_contracts import _integer, _number, _contact
 from .conversation_action_capabilities import _admin_ids
 from .conversation_info_service import _contact_name
@@ -146,7 +147,7 @@ class OwnerTransferServiceMixin:
         with self._metadata_lock, self.store.account_scope(context.owner_id):
             current = self._require_conversation(context)
             self._owner_transfer_allowed(context, current)
-            if current[2] != raw or not self.owner_transfer_available(context):
+            if not same_chat_state(current[2], raw) or not self.owner_transfer_available(context):
                 raise ValueError('Состав или состояние чата изменились')
             tickets = getattr(self, '_owner_transfer_tickets', None)
             if tickets is None:
@@ -247,7 +248,7 @@ class OwnerTransferServiceMixin:
                                             cutoff=chat_sync_time(raw))
         if record['stage'] == 'leave_pending' and self._leave_readback_confirmed(raw, record, context.owner_id):
             with self._metadata_lock, self.store.account_scope(context.owner_id):
-                if self._require_conversation(context)[2] != raw:
+                if not same_chat_state(self._require_conversation(context)[2], raw):
                     raise ValueError('Состояние чата изменилось после проверки')
                 record = self._owner_transfer_cas(context, record, stage='complete', leave_confirmed=True,
                                                  departure_cutoff=chat_sync_time(raw))
@@ -267,7 +268,8 @@ class OwnerTransferServiceMixin:
             with self._metadata_lock, self.store.account_scope(context.owner_id):
                 cached = self._require_conversation(context)
                 self._owner_transfer_allowed(context, cached, successor_id=record['successor_id'], leaving=True)
-                if (cached[2] != raw or raw['type'] != record['chat_type'] or self._owner_transfer_busy(context)
+                if (not same_chat_state(cached[2], raw) or raw['type'] != record['chat_type']
+                        or self._owner_transfer_busy(context)
                         or record['session_nonce'] != self._owner_transfer_nonce(context)):
                     raise ValueError('Состояние чата или сессия изменились')
                 record = self._owner_transfer_cas(context, record, stage='leave_pending',
@@ -323,7 +325,7 @@ class OwnerTransferServiceMixin:
                 with self._metadata_lock, self.store.account_scope(context.owner_id):
                     cached = self._require_conversation(context)
                     self._owner_transfer_allowed(context, cached, successor_id=ticket.successor_id)
-                    if (cached[2] != raw or self._owner_transfer_busy(context)
+                    if (not same_chat_state(cached[2], raw) or self._owner_transfer_busy(context)
                             or record['session_nonce'] != self._owner_transfer_nonce(context)):
                         raise ValueError('Сведения изменились после выбора преемника')
                     record = self._owner_transfer_cas(context, record, transfer_dispatched=True)

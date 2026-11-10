@@ -14,7 +14,8 @@ from ..protocol.conversation_edit_contracts import (
     conversation_edit_limits, conversation_edit_values, build_conversation_edit,
     parse_conversation_edit_ack, edit_matching_fields,
 )
-from ..protocol.conversation_lifecycle_contracts import chat_sync_time, lifecycle_readback
+from ..protocol.conversation_lifecycle_contracts import chat_sync_time, lifecycle_readback, same_chat_state
+from ..protocol.chat_record_maps import normalize_chat_id_maps
 
 
 def _revision(raw, owner_id):
@@ -61,8 +62,9 @@ class ConversationEditServiceMixin:
                 or not isinstance(raw.get('title'), str) or not raw['title']
                 or not isinstance(raw.get('description', ''), str)):
             raise ValueError('Изменение сведений этого чата сейчас недоступно')
-        admin = raw.get('adminParticipants', {}).get(str(context.owner_id), {})
-        # Normalized DTO maps use string IDs; absent permissions mean zero.
+        # LOGIN/push DTOs keep binary int64 keys; readbacks use decimal strings.
+        # Normalize both (conflicting spellings fail closed); absent permissions mean zero.
+        admin = normalize_chat_id_maps(raw).get('adminParticipants', {}).get(str(context.owner_id), {})
         permission = admin.get('permissions', 0) & 8
         if raw['type'] == 'CHANNEL':
             allowed = cap['owner'] or permission
@@ -148,7 +150,7 @@ class ConversationEditServiceMixin:
         raw = self._conversation_edit_read(context, record)
         with self._metadata_lock, self.store.account_scope(context.owner_id):
             cached = self._require_conversation(context)
-            if cached[2] != raw:
+            if not same_chat_state(cached[2], raw):
                 raise ValueError('Сведения изменились во время открытия редактора')
             pending = self._conversation_edit_record(context)
             limits = (tuple(pending['limits']) if pending else
@@ -192,7 +194,7 @@ class ConversationEditServiceMixin:
             raise ValueError('Тип ожидающего изменения изменился')
         observed = edit_matching_fields(raw, record['patch'])
         with self._metadata_lock, self.store.account_scope(context.owner_id):
-            if self._require_conversation(context)[2] != raw:
+            if not same_chat_state(self._require_conversation(context)[2], raw):
                 raise ValueError('Сведения изменились после проверки')
             if set(observed) != set(record['patch']):
                 record = self._conversation_edit_cas(context, record, observed_fields=observed)

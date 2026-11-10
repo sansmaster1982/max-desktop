@@ -4,8 +4,13 @@ from __future__ import annotations
 import copy
 
 ALL_FOLDER = 'all.chat.folder'
-FOLDER_FILTERS = tuple(range(15))
-FOLDER_OPTIONS = tuple(range(5))
+# WEB 26.11.3 (build 21379) added FILTER_ARCHIVE=15, OPTION_NO_EXCLUDE=5 and
+# OPTION_HIDDEN_FOLDER=6. They are accepted so such folders still load and can
+# be edited; folder_view reports them as unsupported instead of evaluating them.
+FOLDER_FILTERS = tuple(range(16))
+FOLDER_OPTIONS = tuple(range(7))
+UNEVALUATED_FILTERS = frozenset({15})
+UNEVALUATED_OPTIONS = frozenset({5, 6})
 
 
 def int64(value):

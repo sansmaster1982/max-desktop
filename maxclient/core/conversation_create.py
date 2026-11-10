@@ -68,8 +68,33 @@ class ConversationCreateServiceMixin:
         pending = self._conversation_creation_load(binding)
         if pending is None:
             return None
+        title = pending['values'].get('title')
         return {'kind': pending['kind'], 'stage': pending['stage'],
-                'has_chat_id': 'chat_id' in pending, 'chat_id': pending.get('chat_id')}
+                'has_chat_id': 'chat_id' in pending, 'chat_id': pending.get('chat_id'),
+                'cid': pending['cid'], 'title': title if isinstance(title, str) else ''}
+
+    def release_unconfirmed_conversation_creation(self, *, context, cid):
+        """Explicit user release of a journal that never received a server chat ID.
+
+        No RPC and no resend: the UI first warns that the earlier chat may exist.
+        A journal with a recorded chat ID keeps its read-only verification path.
+        """
+        binding = self._conversation_creation_binding(context)
+        lock = self._conversation_creation_lock()
+        if not lock.acquire(blocking=False):
+            raise ValueError('Создание или проверка уже выполняется')
+        try:
+            pending = self._conversation_creation_load(binding)
+            if pending is None:
+                return False
+            if 'chat_id' in pending:
+                raise ValueError('ID созданного чата известен; используйте проверку результата')
+            if type(cid) is not int or pending['cid'] != cid:
+                raise ValueError('Ожидающее создание изменилось. Откройте создание заново')
+            self._conversation_creation_clear(binding)
+            return True
+        finally:
+            lock.release()
 
     def _conversation_creation_observe(self, binding, pending, *, description=False):
         if 'chat_id' not in pending:

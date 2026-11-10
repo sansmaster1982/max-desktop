@@ -49,5 +49,8 @@ class NotificationPolicy:
         if chat.is_channel:
             sound = False
         details = values.get('PUSH_DETAILS') is True
-        return Notice(chat.id, _plain(chat.display, 100) if details else 'MAX',
+        # Until the sender's identity is hydrated the row title is only the
+        # local placeholder; a chat number is not a name worth announcing.
+        named = bool(chat.title) and chat.title != f'Чат {chat.id}'
+        return Notice(chat.id, _plain(chat.display, 100) if details and named else 'MAX',
                       _plain(message.preview, 240) if details else 'Новое сообщение', sound)

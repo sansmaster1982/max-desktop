@@ -101,9 +101,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_server ON messages(chat_id, server_id)
 """
 
 
+_OWNER_UNKNOWN = object()
+
+
 class Store:
     def __init__(self, db_path: Path) -> None:
         self._lock = threading.RLock()
+        # cache_owner is read by nearly every UI guard; it changes only through
+        # clear_cache() and bind_owner() of this Store, which reset the copy.
+        self._owner_cache = _OWNER_UNKNOWN
         self._db = sqlite3.connect(str(db_path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         with self._lock:
@@ -176,36 +182,50 @@ class Store:
         """Полностью очистить кэш аккаунта (чаты/контакты/сообщения). Нужно при
         входе под ДРУГИМ аккаунтом — иначе старые данные «протекают» в новый."""
         with self._lock:
-            self._db.execute("DELETE FROM messages")
-            self._db.execute("DELETE FROM contacts")
-            self._db.execute("DELETE FROM chats")
-            self._db.execute("DELETE FROM cache_metadata")
-            self._db.commit()
+            self._owner_cache = _OWNER_UNKNOWN
+            try:
+                self._db.execute("DELETE FROM messages")
+                self._db.execute("DELETE FROM contacts")
+                self._db.execute("DELETE FROM chats")
+                self._db.execute("DELETE FROM cache_metadata")
+                self._db.commit()
+            finally:
+                self._owner_cache = _OWNER_UNKNOWN
 
     @property
     def cache_owner(self) -> Optional[int]:
         with self._lock:
+            if self._owner_cache is not _OWNER_UNKNOWN:
+                return self._owner_cache
             row = self._db.execute("SELECT value FROM cache_metadata WHERE key='owner_id'").fetchone()
-        if row is None:
-            return None
-        try:
-            return int(row["value"])
-        except (TypeError, ValueError):
-            return None
+            value = None
+            if row is not None:
+                try:
+                    value = int(row["value"])
+                except (TypeError, ValueError):
+                    value = None
+            self._owner_cache = value
+            return value
 
     def bind_owner(self, owner_id: int) -> bool:
         """Atomically fail closed for an unknown/different account cache owner."""
         if type(owner_id) is not int:
             raise ValueError("A confirmed integer account ID is required")
-        with self._lock, self._db:
-            if self.cache_owner == owner_id:
-                return False
-            self._db.execute("DELETE FROM messages")
-            self._db.execute("DELETE FROM contacts")
-            self._db.execute("DELETE FROM chats")
-            self._db.execute("DELETE FROM cache_metadata")
-            self._db.execute("INSERT INTO cache_metadata(key,value) VALUES('owner_id',?) "
-                             "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(owner_id),))
+        with self._lock:
+            try:
+                with self._db:
+                    if self.cache_owner == owner_id:
+                        return False
+                    self._owner_cache = _OWNER_UNKNOWN
+                    self._db.execute("DELETE FROM messages")
+                    self._db.execute("DELETE FROM contacts")
+                    self._db.execute("DELETE FROM chats")
+                    self._db.execute("DELETE FROM cache_metadata")
+                    self._db.execute("INSERT INTO cache_metadata(key,value) VALUES('owner_id',?) "
+                                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(owner_id),))
+            finally:
+                # Committed or rolled back, the next read takes the stored value.
+                self._owner_cache = _OWNER_UNKNOWN
         return True
 
     def save_profile(self, profile: Profile) -> None:
@@ -495,6 +515,15 @@ class Store:
         return [Contact(id=r["id"], name=r["name"], phone=r["phone"],
                         avatar_url=r["avatar_url"], is_verified=bool(r["is_verified"])) for r in rows]
 
+    def get_contact(self, contact_id: int) -> Optional[Contact]:
+        """One stored contact by ID, the same row list_contacts() would return."""
+        with self._lock:
+            r = self._db.execute("SELECT * FROM contacts WHERE id=?", (contact_id,)).fetchone()
+        if r is None:
+            return None
+        return Contact(id=r["id"], name=r["name"], phone=r["phone"],
+                       avatar_url=r["avatar_url"], is_verified=bool(r["is_verified"]))
+
     def hidden_contact_ids(self, owner_id: int) -> set[int]:
         """Local address-list preferences; raw profile metadata stays readable."""
         if type(owner_id) is not int or not -(2**63) <= owner_id < 2**63:
@@ -597,6 +626,17 @@ class Store:
                     "UPDATE messages SET status=? WHERE local_id=?", (status, local_id)
                 )
             self._db.commit()
+
+    def settle_unsent_message(self, chat_id: int, local_id: str, status: str) -> bool:
+        """Finish only a still-pending local row; an acknowledged row is never downgraded."""
+        if (status not in ('failed', 'unknown') or type(chat_id) is not int
+                or not isinstance(local_id, str) or not local_id):
+            raise ValueError('An unsent local message and a final local status are required')
+        with self._lock, self._db:
+            cursor = self._db.execute(
+                "UPDATE messages SET status=? WHERE chat_id=? AND local_id=? "
+                "AND server_id IS NULL AND status='pending'", (status, chat_id, local_id))
+        return cursor.rowcount == 1
 
     def apply_message_ack(self, chat_id: int, raw: dict, *, local_id: Optional[str] = None,
                           my_id: Optional[int] = None, outgoing: Optional[bool] = None,
@@ -1214,6 +1254,21 @@ class Store:
                 candidate = self._row_to_msg(row) if row is not None else None
                 self._db.execute('UPDATE chats SET last_time_ms=?,last_preview=? WHERE id=?',
                     (candidate.time_ms if candidate else None, candidate.preview if candidate else None, chat_id))
+
+    def repair_preview_after_removal(self, chat_id: int, removed_time) -> bool:
+        """Move a chat preview off a server-removed message to the latest visible row."""
+        if type(chat_id) is not int or not _finite_file_number(removed_time):
+            return False
+        with self._lock, self._db:
+            current = self.get_chat(chat_id)
+            if current is None or current.last_time_ms != removed_time:
+                return False
+            row = self._db.execute("SELECT * FROM messages WHERE chat_id=? AND status!='removed' "
+                                   'ORDER BY time_ms DESC,row DESC LIMIT 1', (chat_id,)).fetchone()
+            candidate = self._row_to_msg(row) if row is not None else None
+            self._db.execute('UPDATE chats SET last_time_ms=?,last_preview=? WHERE id=?',
+                (candidate.time_ms if candidate else None, candidate.preview if candidate else None, chat_id))
+            return True
 
     def conversation_action_journal(self, owner_id, chat_id):
         with self.account_scope(owner_id):
