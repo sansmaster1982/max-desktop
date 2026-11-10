@@ -206,7 +206,9 @@ class ContactProfileServiceMixin:
             if (not isinstance(raw, dict) or raw and
                     (type(raw.get('id')) is not int or raw['id'] != contact_id)):
                 raise ValueError('Не подтверждён выбранный контакт')
-            cached = next((row for row in self.store.list_contacts() if row.id == contact_id), None)
+            # One indexed row, not a scan of the whole address book: this runs
+            # several times per contact right-click and menu row.
+            cached = self.store.get_contact(contact_id)
             if not raw and cached is None:
                 raise ValueError('Контакта нет в текущей сессии')
             return copy.deepcopy(cached), raw
@@ -504,9 +506,34 @@ class ContactProfileServiceMixin:
         if not lock.acquire(blocking=False):
             raise ValueError('Дождитесь текущего изменения контакта')
         try:
+            self._recheck_pending_contact_elsewhere(context)
             return self._read_contact_profile(context, allow_equivalent_cached=True)
         finally:
             lock.release()
+
+    def _recheck_pending_contact_elsewhere(self, context):
+        """One unresolved contact write disables every card of this owner.
+
+        «Проверить состояние» on any of them therefore reads that write's own
+        target with the same GET-only32 as its card. Nothing is resent; the
+        record clears only on that contact's matching state.
+        """
+        binding, _, _ = self._contact_profile_cache(context)
+
+        def targets():
+            found = []
+            for name in ('_pending_contact_profile_write', '_pending_contact_write'):
+                pending = getattr(self, name, None)
+                if (isinstance(pending, dict) and pending.get('owner') == binding[0]
+                        and pending.get('inflight') is not True and int64(pending.get('id'))
+                        and pending['id'] != context.contact_id and pending['id'] not in found):
+                    found.append(pending['id'])
+            return found
+        for identity in self._history_cache_write(binding, targets):
+            try:
+                self._read_contact_profile(ContactContext(*binding, identity), allow_equivalent_cached=True)
+            except Exception:
+                pass  # Still unresolved: every card keeps reporting it.
 
     def rename_contact_profile(self, context, first_name, last_name=''):
         first = contact_name(first_name, required=True)

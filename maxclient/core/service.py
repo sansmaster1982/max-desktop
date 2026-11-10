@@ -49,6 +49,7 @@ class _ChatMetadataHydration:
     MAX_PENDING = 64
     MAX_ATTEMPTS = 256
     MAX_WORKERS = 2
+    MAX_FAILED_READS = 3
 
     def __init__(self, service):
         self.service = service
@@ -56,6 +57,7 @@ class _ChatMetadataHydration:
         self.queue = deque()
         self.pending = set()
         self.attempts = OrderedDict()
+        self.failures = {}
         self.workers = {}
         self.context = None
         self.stopped = False
@@ -82,6 +84,7 @@ class _ChatMetadataHydration:
                 self.queue.clear()
                 self.pending.clear()
                 self.attempts.clear()
+                self.failures.clear()
         for identity in chat_ids:
             if not _is_read_int(identity):
                 continue
@@ -114,11 +117,12 @@ class _ChatMetadataHydration:
                     if self.stopped or self.context is not context or not self.queue:
                         return
                     binding, identity = self.queue.popleft()
+                failed = False
                 try:
                     self.service._hydrate_chat_identity(binding, identity)
                 except Exception:
                     # A metadata read failure is not an authentication verdict.
-                    pass
+                    failed = True
                 finally:
                     try:
                         need = self.service._history_cache_write(binding, lambda:
@@ -129,6 +133,16 @@ class _ChatMetadataHydration:
                         self.pending.discard((context, identity))
                         if self.context is context and need is not None:
                             self.attempts[identity] = need
+                            if failed:
+                                # A failed read (timeout, dropped socket) is not
+                                # an answer. Let a later push/open of this chat
+                                # ask again, at most MAX_FAILED_READS times per
+                                # session; never from a timer or a loop here.
+                                if len(self.failures) > self.MAX_ATTEMPTS:
+                                    self.failures.clear()
+                                count = self.failures[identity] = self.failures.get(identity, 0) + 1
+                                if count < self.MAX_FAILED_READS:
+                                    self.attempts.pop(identity, None)
                         if not self.pending:
                             self.idle.set()
         finally:
@@ -144,6 +158,7 @@ class _ChatMetadataHydration:
             self.queue.clear()
             self.pending.clear()
             self.attempts.clear()
+            self.failures.clear()
             self.idle.set()
 
     def invalidate(self):
@@ -152,6 +167,7 @@ class _ChatMetadataHydration:
             self.queue.clear()
             self.pending.clear()
             self.attempts.clear()
+            self.failures.clear()
             self.idle.set()
 
 
@@ -168,8 +184,14 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         self.store = Store(paths.db_file)
 
         # Лог протокола для диагностики: %APPDATA%\MAX Desktop\debug.log,
-        # перезаписывается при старте сессии.
+        # перезаписывается при старте сессии. Непустой лог прошлой сессии
+        # сначала заменяет debug.prev.log.
         self._log_path = paths.dir / "debug.log"
+        try:
+            if self._log_path.stat().st_size:
+                self._log_path.replace(paths.dir / "debug.prev.log")
+        except OSError:
+            pass
         try:
             self._log_path.write_text("", encoding="utf-8")
         except OSError:
@@ -405,7 +427,9 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             self._server_metadata_owner = owner
         if isinstance(data.get("config"), dict):
             self._remember_config(data["config"], owner_id=owner)
-        self._remember_chat_info({"chats": data.get("chats")}, my_id=owner)
+        # LOGIN of a newly authenticated session is the server's current state,
+        # newer than any receipt applied on the previous connection.
+        self._remember_chat_info({"chats": data.get("chats")}, my_id=owner, fresh_session=True)
         self._remember_contact_info({"contacts": data.get("contacts")})
         profile_record = data.get('profile', {}).get('contact') if isinstance(data.get('profile'), dict) else None
         if (isinstance(profile_record, dict) and type(profile_record.get('id')) is int
@@ -419,9 +443,11 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                                                    server_fields=frozenset()))
                 self._invalidate_contacts()
 
-    def _remember_chat_info(self, info: dict, *, my_id: Optional[int] = None) -> None:
+    def _remember_chat_info(self, info: dict, *, my_id: Optional[int] = None, message_clock_ids=(),
+                            fresh_session: bool = False) -> None:
         """Retain structured server metadata; local titles are not identity proof."""
         entries = copy.deepcopy(_chat_entries(info))
+        clock_guard = set(message_clock_ids)
         with self._metadata_lock:
             for entry in entries:
                 chat_id = _strict_id(entry.get("id"))
@@ -431,6 +457,8 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                     incoming_last = merged.get('lastMessage')
                     deleted_last = (isinstance(incoming_last, dict)
                                     and self.store.message_was_deleted(chat_id, _strict_id(incoming_last.get('id'))))
+                    if deleted_last:
+                        clock_guard.add(chat_id)
                     if deleted_last or (boundary and self.store.history_was_cleared(
                             chat_id, _message_time(incoming_last))):
                         merged.pop('lastMessage', None)
@@ -444,6 +472,25 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                     new_time = _message_time(merged.get("lastMessage"))
                     if old_time is not None and (deleted_last or new_time is not None and old_time > new_time):
                         merged["lastMessage"] = copy.deepcopy(previous["lastMessage"])
+                    known_mark = _own_read_mark(previous, my_id)
+                    supplied_mark = _own_read_mark(merged, my_id)
+                    if (not fresh_session and known_mark is not None and supplied_mark is not None
+                            and supplied_mark < known_mark and merged.get('markedAsUnread') is not True):
+                        # The snapshot was built before our newer confirmed read
+                        # receipt (ACK50/push130). Only an explicit unread mark
+                        # may move the own marker back; keep the newer marker and
+                        # the counter that belongs to it until fresher evidence.
+                        participants = dict(merged['participants'])
+                        participants.pop(my_id, None)
+                        participants[str(my_id)] = known_mark
+                        merged['participants'] = participants
+                        merged['markedAsUnread'] = previous.get('markedAsUnread') is True
+                        cached_row = self.store.get_chat(chat_id)
+                        if cached_row is not None:
+                            merged['newMessages'] = entry['newMessages'] = cached_row.unread
+                        else:
+                            merged.pop('newMessages', None)
+                            entry.pop('newMessages', None)
                     self._server_chats[chat_id] = merged
                     if my_id is not None and self.store.cache_owner == my_id:
                         self._reconcile_conversation_departure(merged, my_id)
@@ -451,6 +498,12 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         projected_entries = copy.deepcopy(entries)
         for entry in projected_entries:
             chat_id = _strict_id(entry.get('id'))
+            if chat_id in clock_guard and 'lastMessage' not in entry:
+                current = self.store.get_chat(chat_id)
+                if current is not None and current.last_time_ms is not None:
+                    # A deleted/omitted lastMessage keeps the repaired row's own
+                    # message time; an event clock is not a visible message.
+                    entry.pop('lastEventTime', None)
             boundary = self.store.history_boundary(chat_id) if chat_id is not None else None
             if boundary and boundary['deleted']:
                 last = entry.get('lastMessage')
@@ -1057,6 +1110,16 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             if (self.store.history_was_cleared(chat_id, _message_time(raw))
                     or self.store.message_was_deleted(chat_id, _strict_id(raw.get('id')))):
                 continue
+            if raw.get('status') == 'REMOVED':
+                identity = _strict_id(raw.get('id'))
+                cached = self.store.message(chat_id, identity) if identity is not None else None
+                if cached is not None and cached.status != 'removed':
+                    # Removed on the server while this session missed the 142
+                    # (offline, another device): mark the cached row like push128
+                    # does and move a preview that still shows it.
+                    self.store.apply_message_ack(chat_id, raw, my_id=self.my_id, replay=True)
+                    self.store.repair_preview_after_removal(chat_id, cached.time_ms)
+                continue  # A server-removed message is never a new visible row or preview.
             message = Message.from_server(chat_id, raw, self.my_id)
             self.store.refresh_message_control_metadata(chat_id, raw)
             self.store.refresh_message_file_metadata(chat_id, raw)
@@ -1127,6 +1190,19 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             return {'mark': _message_time({'time': mark}),
                     'unread': chat.unread, 'markedAsUnread': raw.get('markedAsUnread') is True}
         return self._history_cache_write(binding, state)
+
+    def read_receipt_frontier(self, chat_id: int, *, context=None):
+        """(id, time) of the newest server-confirmed message, or None; no RPC."""
+        if not _is_read_int(chat_id):
+            raise ValueError('Некорректный чат MAX')
+        binding = self._contact_lookup_binding(context)
+        def frontier():
+            last = self._server_chats.get(chat_id, {}).get('lastMessage')
+            if (not isinstance(last, dict) or not _is_read_int(last.get('id'))
+                    or _message_time(last) is None):
+                return None
+            return last['id'], _message_time(last)
+        return self._history_cache_write(binding, frontier)
 
     def _apply_read_receipt(self, chat_id, owner_id, mark, unread, *,
                             set_as_unread=False, apply_count=True, allow_equal=False):
@@ -1218,8 +1294,12 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             if ('unread' not in response or _message_time({'time': response.get('mark')}) is None
                     or type(response['unread']) is not int or not 0 <= response['unread'] < 2**31):
                 return False
+            # The receipt snapshot above proves nothing newer arrived while we
+            # waited, so an ACK repeating the current marker is still the newest
+            # server count (used by the visible-frontier reconcile request).
             return self._apply_read_receipt(chat_id, binding[0], response['mark'],
-                                            response['unread'], apply_count=unchanged)
+                                            response['unread'], apply_count=unchanged,
+                                            allow_equal=True)
         changed = self._history_cache_write(binding, apply)
         if changed and self.on_chat_changed:
             self.on_chat_changed(chat_id)
@@ -1390,10 +1470,10 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             raise MaxWriteOutcomeUnknown("Не удалось сохранить состояние действия. Перед повтором проверьте чат.") from None
         return pending
 
-    def send_text(self, chat_id: int, text: str, *, context=None) -> Message:
-        return self._send_text_bound(chat_id, text, context=context)
+    def send_text(self, chat_id: int, text: str, *, context=None, on_pending=None) -> Message:
+        return self._send_text_bound(chat_id, text, context=context, on_pending=on_pending)
 
-    def _send_text_bound(self, chat_id, text, *, context=None, reply_id=None):
+    def _send_text_bound(self, chat_id, text, *, context=None, reply_id=None, on_pending=None):
         if not isinstance(text, str) or not text.strip():
             raise ValueError('Введите текст сообщения')
         binding = self._contact_lookup_binding(context)
@@ -1427,6 +1507,11 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             self.store.insert_message(pending)
             self.store.update_chat_preview(chat_id, pending.time_ms, text)
         self._history_cache_write(binding, remember_pending)
+        if callable(on_pending):
+            try:
+                on_pending()  # Display hint for the stored pending row; never alters the send.
+            except Exception:
+                pass
         try:
             self._require_history_context(binding)
             if reply_id is None:
@@ -1445,14 +1530,23 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                 # Never write old-owner status into a switched account/cache.
                 pending.status = 'unknown'
                 pending.error = 'Сессия изменилась; проверьте результат отправки перед повтором.'
+                try:
+                    # Same account after a reconnect: the stored row must not stay
+                    # "pending" forever. account_scope refuses any other owner.
+                    with self._metadata_lock, self.store.account_scope(binding[0]):
+                        self.store.settle_unsent_message(chat_id, local_id, 'unknown')
+                except Exception:
+                    pass
         return pending
 
-    def reply_to_message(self, chat_id: int, message_id: int, text: str, *, context=None) -> Message:
+    def reply_to_message(self, chat_id: int, message_id: int, text: str, *, context=None,
+                         on_pending=None) -> Message:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Введите текст ответа")
         if type(message_id) is not int:
             raise ValueError("Выберите сообщение для ответа")
-        return self._send_text_bound(chat_id, text, context=context, reply_id=message_id)
+        return self._send_text_bound(chat_id, text, context=context, reply_id=message_id,
+                                     on_pending=on_pending)
 
     def edit_message(self, chat_id: int, message_id: int, text: str, *, context=None) -> dict:
         binding = self._message_mutation_binding(context)
@@ -1465,15 +1559,41 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
     def delete_messages(self, chat_id: int, message_ids: list[int], *, for_all: bool = False, context=None) -> dict:
         binding = self._message_mutation_binding(context)
         client = self._require_history_context(binding)
-        result = client.delete_messages(chat_id, message_ids, for_all=for_all, expected_session=binding[2])
-        affected = result.get("messageIds") if isinstance(result, dict) else None
-        if (not isinstance(result, dict) or type(result.get('chatId')) is not int or result.get("chatId") != chat_id
-                or not isinstance(affected, list) or any(type(identity) is not int for identity in affected)
-                or not set(affected).issubset(set(message_ids))):
-            raise MaxWriteOutcomeUnknown("Сервер не подтвердил выбранные сообщения для удаления. Повтор не выполнен.")
+        try:
+            result = client.delete_messages(chat_id, message_ids, for_all=for_all, expected_session=binding[2])
+            affected = result.get("messageIds") if isinstance(result, dict) else None
+            if (not isinstance(result, dict) or type(result.get('chatId')) is not int or result.get("chatId") != chat_id
+                    or not isinstance(affected, list) or any(type(identity) is not int for identity in affected)
+                    or not set(affected).issubset(set(message_ids))):
+                raise MaxWriteOutcomeUnknown("Сервер не подтвердил выбранные сообщения для удаления. Повтор не выполнен.")
+        except MaxWriteOutcomeUnknown:
+            if not for_all and self._deletion_confirmed_by_event(binding, chat_id, message_ids):
+                return {'chatId': chat_id, 'messageIds': list(dict.fromkeys(message_ids))}
+            raise
+        if not set(affected) & set(message_ids):
+            # An explicit ACK without the requested IDs deleted nothing; the
+            # official caller rolls such optimistic removals back.
+            if not for_all and self._deletion_confirmed_by_event(binding, chat_id, message_ids):
+                return {'chatId': chat_id, 'messageIds': list(dict.fromkeys(message_ids))}
+            from ..protocol.errors import MaxError
+            raise MaxError("MSG_DELETE: сервер не удалил выбранные сообщения")
         self._message_mutation_commit(binding, lambda: self._remember_deleted_messages(
             binding[0], chat_id, affected), chat_id)
+        # Patch any currently open view by exact confirmed IDs, as for 142;
+        # a reopened/reloaded view must not keep showing the removed row.
+        change = MessageChange(*binding, chat_id, tuple(dict.fromkeys(affected)))
+        callback = getattr(self, 'on_message_changed', None)
+        if callback is not None and self.is_current_message_change(change):
+            callback(change)
         return result
+
+    def _deletion_confirmed_by_event(self, binding, chat_id, message_ids):
+        """True only when a current-owner 142 already tombstoned every requested ID."""
+        try:
+            return self._history_cache_write(binding, lambda: isinstance(message_ids, list) and bool(message_ids)
+                and all(self.store.message_was_deleted(chat_id, identity) for identity in message_ids))
+        except ValueError:
+            return False
 
     def _remember_deleted_messages(self, owner_id, chat_id, identities):
         """Called inside the bound metadata/store scope for confirmed66 or142."""
@@ -1634,8 +1754,12 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                         is_verified=contact.is_verified, server_fields=contact.server_fields))
                 needle = (_clean_name(query) or '').casefold()
                 if needle:
+                    # A number typed as 8 (900) 000-00-01 or a name written with
+                    # the other yo/ye letter is the same saved contact.
+                    from .search_service import contact_matches
                     projected = [contact for contact in projected if needle in contact.display.casefold()
-                                 or needle in (contact.phone or '').casefold()]
+                                 or needle in (contact.phone or '').casefold()
+                                 or contact_matches(needle, contact.display, contact.phone)]
                 projected.sort(key=lambda contact: (contact.display.casefold(), contact.id))
                 if self.my_id != owner or self.store.cache_owner != owner:
                     raise ValueError('Аккаунт изменился во время чтения контактов')
@@ -1685,7 +1809,14 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         if not _is_read_int(cid):
             raise ValueError('Пользователь MAX с таким номером не найден')
         def remember():
-            self._remember_contact_info({'contacts': [data]})
+            current = self._server_contacts.get(cid)
+            # RPC46 yields a clockless projection (no updateTime), not a
+            # versioned ContactDTO. It must not replace this owner's versioned
+            # record: membership, block state and a card's observation stay.
+            # An explicit REMOVED record is still replaced, as before.
+            if not (isinstance(current, dict) and _is_read_int(current.get('updateTime'))
+                    and current.get('status') != 'REMOVED'):
+                self._remember_contact_info({'contacts': [data]})
             canonical = _person_name(data)
             # A supplied label is local only. RPC46 performs a lookup, not ADD.
             display = _clean_name(name) or canonical or phone
@@ -2507,7 +2638,15 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                 return False
         fresh_count = (previous is None and (cached is None or cached.last_time_ms is None
                                             or message.time_ms >= cached.last_time_ms))
-        authoritative_count = fresh_count and type(raw.get('newMessages')) is int and raw['newMessages'] >= 0
+        known_mark = _own_read_mark(self._server_chats.get(message.chat_id, {}), binding[0])
+        supplied_mark = _own_read_mark(merged, binding[0])
+        # Same rule as _remember_chat_info: a snapshot older than our confirmed
+        # read marker carries a count from before that read. It is not
+        # authoritative, so this delivery is counted by the ordinary increment.
+        stale_read = (known_mark is not None and supplied_mark is not None
+                      and supplied_mark < known_mark and merged.get('markedAsUnread') is not True)
+        authoritative_count = (fresh_count and not stale_read
+                               and type(raw.get('newMessages')) is int and raw['newMessages'] >= 0)
         if not authoritative_count:
             if cached is not None:
                 merged['newMessages'] = cached.unread
@@ -2620,7 +2759,8 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                     # A deletion snapshot may precede an unrelated new delivery.
                     # Only IDs in this event were removed by the helper above.
                     deletion_chat['lastMessage'] = copy.deepcopy(current_last)
-                self._remember_chat_info({'chats': [deletion_chat]}, my_id=binding[0])
+                self._remember_chat_info({'chats': [deletion_chat]}, my_id=binding[0],
+                    message_clock_ids=() if 'lastMessage' in deletion_chat else (chat_id,))
                 change = MessageChange(*binding, chat_id, identities) if identities else None
                 return None, (chat_id,), change
             return None, (), None
@@ -2631,6 +2771,8 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                 or self.store.message_was_deleted(msg.chat_id, msg.id)):
             return None, (), None
         previous = self.store.message(msg.chat_id, msg.id)
+        if previous is None and data['message'].get('status') == 'REMOVED':
+            return None, (), None  # A removed message is never a new visible arrival.
         cached_chat = self.store.get_chat(msg.chat_id)
         fresh_count = (previous is None and (cached_chat is None or cached_chat.last_time_ms is None
                                             or msg.time_ms >= cached_chat.last_time_ms))
@@ -2646,9 +2788,14 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         if (cached.update_time_ms is None or msg.update_time_ms is not None
                 and msg.update_time_ms >= cached.update_time_ms):
             self._record_server_last_message(msg.chat_id, data['message'], replay=True)
-        self.store.update_chat_preview(
-            msg.chat_id, cached.time_ms, cached.preview,
-            inc_unread=int(inserted and not cached.outgoing and not inline_count), monotonic=True)
+        if cached.status == 'removed':
+            # A server-removed row is never the chat preview; a preview that
+            # still shows it moves to the latest visible message.
+            self.store.repair_preview_after_removal(msg.chat_id, cached.time_ms)
+        else:
+            self.store.update_chat_preview(
+                msg.chat_id, cached.time_ms, cached.preview,
+                inc_unread=int(inserted and not cached.outgoing and not inline_count), monotonic=True)
         if msg.chat_id in self._server_chats:
             # Folder badges consume the canonical projection, not only SQL.
             self._server_chats[msg.chat_id]['newMessages'] = self.store.get_chat(msg.chat_id).unread
@@ -2736,12 +2883,19 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             self.on_state_changed(state)
 
     def _on_auth_invalid(self) -> None:
-        """Report a rejected token without deleting the saved credential."""
+        """Report an ended or rejected session without deleting the saved credential."""
         self._clear_incoming_calls()
         worker = getattr(self, '_chat_metadata_hydration', None)
         if worker is not None:
             worker.invalidate()
-        self.last_restore_error = MaxLoginFailed("Сервер MAX отклонил сохранённый токен")
+        ended = getattr(self.client, 'auth_end_reason', None) == 'server_logout'
+        code = getattr(self.client, 'auth_end_code', None)
+        error = MaxLoginFailed("Сервер MAX завершил сессию" if ended
+                               else "Сервер MAX отклонил сохранённый токен")
+        # server_logout: push LOGOUT 20; login_rejected: reconnect LOGIN refused.
+        error.reason = 'server_logout' if ended else 'login_rejected'
+        error.server_code = code if isinstance(code, str) else None
+        self.last_restore_error = error
         self.client.close()
         if self.on_auth_invalid:
             self.on_auth_invalid()
@@ -3122,6 +3276,14 @@ def _is_verification_contact(contact) -> bool:
             or _verification_link(contact.get("username")))
 
 
+def _own_read_mark(raw, owner) -> Optional[int | float]:
+    """Own participant read marker of one chat DTO, for either key spelling."""
+    participants = raw.get('participants') if isinstance(raw, dict) else None
+    if type(owner) is not int or not isinstance(participants, dict):
+        return None
+    return _message_time({'time': participants.get(str(owner), participants.get(owner))})
+
+
 def _message_time(value) -> Optional[int | float]:
     if not isinstance(value, dict):
         return None
@@ -3200,9 +3362,15 @@ def _extract_chats(info: dict, my_id: Optional[int] = None) -> list[Chat]:
                 and mm['lastMessage'].get('deleted') is not True
                 and mm['lastMessage'].get('removed') is not True
                 and mm['lastMessage'].get('status') != 'REMOVED'):
-            localized = Message.from_server(cid, mm['lastMessage'], my_id).control_display_text
+            parsed_last = Message.from_server(cid, mm['lastMessage'], my_id)
+            localized = parsed_last.control_display_text
             if localized is not None:
                 last_preview = localized
+            elif last_preview is None:
+                # A photo, file, sticker, forward or service message has no
+                # literal text. Use the same label as the 128 delivery path, so
+                # LOGIN/CHAT_INFO/135 snapshots cannot blank the row preview.
+                last_preview = parsed_last.preview or None
         if last_time is None:
             last_time = _message_time({"time": mm.get("lastEventTime")})
         if last_time is not None:

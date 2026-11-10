@@ -1,7 +1,9 @@
 """Embedded, session-bound contact sidebar; opening it never performs a lookup."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QSize
+import time
+
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QPushButton, QVBoxLayout, QWidget,
@@ -16,9 +18,18 @@ from .widgets.avatar import Avatar
 from .widgets.chat_list_item import _ElidedLabel
 from .widgets.line_icon import line_icon
 
+# Up to this many contacts every row widget is built at once, as before. A longer
+# book still gets one QListWidgetItem per contact (selection, keyboard, itemAt,
+# menus), but a ContactWorkspaceRow only for rows on screen; rows scrolled into
+# view are built then, rows near the viewport in short zero-delay batches.
+_EAGER_ROWS = 40
+_PREFETCH_PAGES = 1        # Viewport heights built ahead above and below.
+_BATCH_SECONDS = 0.008     # A batch yields to the event loop after about 8 ms.
+
 
 class _ContactList(QListWidget):
     keyboard_open = Signal(object)
+    viewport_changed = Signal()  # Resize/show may expose rows without a widget.
 
     def keyPressEvent(self, event):  # noqa: N802
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -28,6 +39,14 @@ class _ContactList(QListWidget):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self.viewport_changed.emit()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        self.viewport_changed.emit()
 
 
 class ContactsWorkspace(QWidget):
@@ -45,6 +64,15 @@ class ContactsWorkspace(QWidget):
         self._rows_snapshot = None
         self._language = 'ru'
         self._language_epoch = 0
+        # Lazily built rows of the current build only; any rebuild, expiry,
+        # deactivation or language change drops the queued batch.
+        self._lazy_context = None
+        self._lazy_pending = 0
+        self._lazy_building = False
+        self._lazy_timer = QTimer(self)
+        self._lazy_timer.setSingleShot(True)
+        self._lazy_timer.setInterval(0)
+        self._lazy_timer.timeout.connect(self._build_lazy_batch)
         self._empty_source = 'Откройте контакты после подключения к MAX.'
         self.setObjectName('Sidebar')
         self.setMinimumWidth(290)
@@ -84,10 +112,14 @@ class ContactsWorkspace(QWidget):
         self.list.setObjectName('ChatList')
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.setSpacing(0)
+        # Every row is 64 px high; the view need not measure each row widget.
+        self.list.setUniformItemSizes(True)
         self.list.itemClicked.connect(self._open_item)
         self.list.keyboard_open.connect(self._open_item)
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._context_menu)
+        self.list.verticalScrollBar().valueChanged.connect(self._build_visible)
+        self.list.viewport_changed.connect(self._build_visible)
         root.addWidget(self.list, 1)
         self.empty = QLabel()
         self.empty.setObjectName('EmptyHint')
@@ -115,6 +147,8 @@ class ContactsWorkspace(QWidget):
         if language != self._language:
             self._language = language
             self._language_epoch += 1
+            # A queued batch is dropped; rows built later read the new language.
+            self._lazy_timer.stop()
         self.title.setText(tr('Контакты', language))
         self.plus_button.setAccessibleName(tr('Меню контактов', language))
         self.plus_button.setToolTip(tr('Меню контактов', language))
@@ -145,6 +179,7 @@ class ContactsWorkspace(QWidget):
             self.search.blockSignals(True)
             self.search.clear()
             self.search.blockSignals(False)
+            self._cancel_lazy()
             self.list.clear()
             self._rows_snapshot = None
         self._context = context
@@ -155,6 +190,7 @@ class ContactsWorkspace(QWidget):
         """Drop account rows and outstanding UI context before leaving the page."""
         self._active = False
         self._context = None
+        self._cancel_lazy()
         if not isValid(self):
             return
         self.search.blockSignals(True)
@@ -189,6 +225,7 @@ class ContactsWorkspace(QWidget):
             if not self.context_current():
                 self._expired()
             else:
+                self._cancel_lazy()
                 self.list.clear()
                 self._rows_snapshot = None
                 self.list.hide()
@@ -215,23 +252,46 @@ class ContactsWorkspace(QWidget):
         prior_contact = previous.data(Qt.ItemDataRole.UserRole) if previous is not None else None
         selected = prior_contact.id if isinstance(prior_contact, Contact) else None
         scroll = self.list.verticalScrollBar().value()
-        self.list.clear()
-        for contact in contacts:
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, contact)
-            item.setData(Qt.ItemDataRole.AccessibleTextRole, _contact_display_name(contact))
-            row = ContactWorkspaceRow(contact, language=self._language)
-            item.setSizeHint(QSize(0, 64))
-            self.list.addItem(item)
-            self.list.setItemWidget(item, row)
-            if contact.id == selected:
-                self.list.setCurrentItem(item)
+        lazy = len(contacts) > _EAGER_ROWS
+        self._cancel_lazy()  # New contents: a queued batch belongs to the old rows.
+        self._lazy_building = True
+        # One repaint for the whole list instead of one per inserted row widget.
+        self.list.setUpdatesEnabled(False)
+        try:
+            self.list.clear()
+            for contact in contacts:
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, contact)
+                item.setData(Qt.ItemDataRole.AccessibleTextRole, _contact_display_name(contact))
+                row = None if lazy else ContactWorkspaceRow(contact, language=self._language)
+                item.setSizeHint(QSize(0, 64))
+                self.list.addItem(item)
+                if row is not None:
+                    self.list.setItemWidget(item, row)
+                if contact.id == selected:
+                    self.list.setCurrentItem(item)
+            if lazy:
+                # setItemWidget used to lay the items out on the way; without it the
+                # scroll range would still be the old one when restored below.
+                self.list.doItemsLayout()
+        finally:
+            self.list.setUpdatesEnabled(True)
+            self._lazy_building = False
         if not self.context_current() or self._context is not context:
             self._expired()
             return False
         self._rows_snapshot = snapshot
         self.list.verticalScrollBar().setValue(scroll)
         self._set_result_state(query)
+        if lazy:
+            # The list was just shown and the empty hint hidden: settle the final
+            # height now so the rows on screen get their widgets before the paint.
+            layout = self.layout()
+            if layout is not None:
+                layout.activate()
+            self._lazy_context = context
+            self._lazy_pending = len(contacts)
+            self._build_visible()
         return True
 
     def _set_result_state(self, query: str) -> None:
@@ -240,6 +300,115 @@ class ContactsWorkspace(QWidget):
         self._set_empty('Ничего не найдено' if query else 'Пока нет контактов')
         self.empty.setVisible(not found)
         self.plus_button.setEnabled(True)
+
+    def _cancel_lazy(self) -> None:
+        """Forget rows still waiting for a widget; a queued batch then does nothing."""
+        self._lazy_context = None
+        self._lazy_pending = 0
+        timer = self._lazy_timer
+        if isValid(timer):
+            timer.stop()
+
+    def _lazy_current(self) -> bool:
+        """Rows may be built only for the build of the still-current session."""
+        return (self._lazy_pending > 0 and self._lazy_context is not None
+                and self._lazy_context is self._context and self.context_current())
+
+    def _visible_rows(self) -> range:
+        """Rows intersecting the viewport; empty only for an empty list."""
+        count = self.list.count()
+        if count <= 0:
+            return range(0)
+        top = self.list.indexAt(QPoint(0, 0))  # Also runs the view's pending item layout.
+        if top.isValid():
+            first = top.row()
+        else:
+            first = min(max(self.list.verticalScrollBar().value(), 0), count - 1)
+            if self.list.verticalScrollMode() != QListWidget.ScrollMode.ScrollPerItem:
+                first = min(first // 64, count - 1)
+        bottom = self.list.indexAt(QPoint(0, max(self.list.viewport().height(), 1) - 1))
+        last = bottom.row() if bottom.isValid() else count - 1
+        return range(first, max(first, last) + 1)
+
+    def _build_row(self, item) -> bool:
+        """Give one listed contact its row widget, exactly as an eager build does."""
+        if item is None or self.list.itemWidget(item) is not None:
+            return False
+        contact = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(contact, Contact):
+            return False
+        self.list.setItemWidget(item, ContactWorkspaceRow(contact, language=self._language))
+        self._lazy_pending -= 1
+        return True
+
+    def _build_rows(self, rows, deadline=None) -> bool:
+        """Build rows in order; False if the deadline stopped before the last one.
+
+        Callers hold _lazy_building, so the scroll/resize signals raised by the
+        view's own relayout do not re-enter here.
+        """
+        built, finished = 0, True
+        for row in rows:
+            if built and deadline is not None and time.perf_counter() >= deadline:
+                finished = False
+                break
+            built += self._build_row(self.list.item(row))
+        if built:
+            self.list.doItemsLayout()  # Place the new widgets before the next paint.
+        return finished
+
+    def _unbuilt(self, rows) -> list:
+        """The given rows that are listed but still have no row widget."""
+        return [row for row in rows if (item := self.list.item(row)) is not None
+                and self.list.itemWidget(item) is None]
+
+    def _build_visible(self, *_args) -> None:
+        """Scroll, resize and show: rows on screen and the current row get widgets now."""
+        if (self._lazy_pending <= 0 or self._lazy_building or not isValid(self)
+                or not self.list.isVisible()):
+            return  # A hidden list resumes from its show event.
+        self._lazy_building = True
+        try:
+            rows = list(self._visible_rows())
+            if self.list.currentRow() >= 0:
+                rows.append(self.list.currentRow())
+            rows = self._unbuilt(rows)
+            if rows:
+                if not self._lazy_current():
+                    self._cancel_lazy()
+                    return
+                self._build_rows(rows)
+        finally:
+            self._lazy_building = False
+        if self._lazy_pending > 0:
+            self._lazy_timer.start()  # Rows just above and below follow in batches.
+
+    def _build_lazy_batch(self) -> None:
+        """One short zero-delay batch: rows on screen, then one page around, nearest first."""
+        if (self._lazy_pending <= 0 or self._lazy_building or not isValid(self)
+                or not self.list.isVisible()):
+            return
+        finished = True
+        self._lazy_building = True
+        try:
+            visible = self._visible_rows()
+            count = self.list.count()
+            rows = list(visible)
+            for distance in range(1, len(visible) * _PREFETCH_PAGES + 1):
+                if visible.stop - 1 + distance < count:
+                    rows.append(visible.stop - 1 + distance)
+                if visible.start - distance >= 0:
+                    rows.append(visible.start - distance)
+            rows = self._unbuilt(rows)
+            if rows:
+                if not self._lazy_current():
+                    self._cancel_lazy()
+                    return
+                finished = self._build_rows(rows, time.perf_counter() + _BATCH_SECONDS)
+        finally:
+            self._lazy_building = False
+        if not finished and self._lazy_pending > 0:
+            self._lazy_timer.start()
 
     def reveal_contact(self, contact: Contact) -> bool:
         """Reveal a confirmed explicit save even if the previous filter hid it."""
@@ -264,6 +433,7 @@ class ContactsWorkspace(QWidget):
             return
         self._active = False
         self._context = None
+        self._cancel_lazy()
         self.search.blockSignals(True)
         self.search.clear()
         self.search.blockSignals(False)
@@ -306,7 +476,12 @@ class ContactsWorkspace(QWidget):
         self.context_requested.emit(contact.id, self.list.viewport().mapToGlobal(anchor))
 
     def contact_avatar(self, contact_id):
-        """Reuse the exact selected account's already-loaded avatar; no new fetch."""
+        """Reuse the exact selected account's already-loaded avatar; no new fetch.
+
+        A long list builds row widgets lazily: the current or an on-screen row
+        still waiting for its widget is built here, as the viewport would build
+        it. Any other row without a widget yields None, nothing is loaded.
+        """
         if not self.context_current() or not int64(contact_id):
             return None
         for index in range(self.list.count()):
@@ -314,6 +489,14 @@ class ContactsWorkspace(QWidget):
             contact = item.data(Qt.ItemDataRole.UserRole)
             if isinstance(contact, Contact) and contact.id == contact_id:
                 row = self.list.itemWidget(item)
+                if row is None and not self._lazy_building and self._lazy_current():
+                    self._lazy_building = True
+                    try:
+                        if index == self.list.currentRow() or index in self._visible_rows():
+                            self._build_rows((index,))
+                    finally:
+                        self._lazy_building = False
+                    row = self.list.itemWidget(item)
                 if isinstance(row, ContactWorkspaceRow):
                     return row.avatar.cached_photo()
         return None

@@ -91,8 +91,8 @@ def main():
     after = source_manifest(source)
     if source_hashes != after:
         raise SystemExit('Source changed during build')
-    archive = Path(shutil.make_archive(str(out / 'MAXIM-1.1.0-alpha.1-windows-x64'), 'zip', bundle.parent, bundle.name))
-    receipt = {'version': '1.1.0-alpha.1', 'python': sys.version, 'dependencies': versions,
+    archive = Path(shutil.make_archive(str(out / 'MAXIM-1.1.0-alpha.3-windows-x64'), 'zip', bundle.parent, bundle.name))
+    receipt = {'version': '1.1.0-alpha.3', 'python': sys.version, 'dependencies': versions,
         'sourceManifest': source_hashes, 'sourceUnchanged': True, 'selftestPassed': True,
         'selftestScope': 'isolated empty data; login UI+QtMultimedia construction only',
         'realLoginTested': False, 'networkGuard': 'Python audit hook; no native-network verification claim',

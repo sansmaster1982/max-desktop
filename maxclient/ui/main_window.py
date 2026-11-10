@@ -6,7 +6,9 @@ Push с сервера приходит в колбэки сервиса (из �
 from __future__ import annotations
 
 import copy
+import threading
 from collections import deque
+from contextlib import contextmanager
 from .public_build import web_features_available
 from typing import Optional
 
@@ -47,6 +49,7 @@ from .chat_view import ChatView
 from .call_history_dialog import CallHistoryDialog
 from .contacts_dialog import ContactsDialog
 from .desktop_notifications import DesktopNotifications
+from .login_window import session_ended_text
 from .settings_workspace import SettingsWorkspace
 from .search_panel import SearchPanel
 from .theme import resolve_theme
@@ -132,6 +135,7 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         self._row_folder_rows = None
         self._row_metadata_job = None
         self._row_metadata_failed = False
+        self._row_pass = None
         self._info_panel = None
         self._info_context = None
         self._info_pages = {}
@@ -416,7 +420,7 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         return ('folder:all.chat.folder' if 'folder:all.chat.folder' in self._folders
                 else next(iter(self._folders)))
 
-    def _on_folders(self, snapshot, *, context=None):
+    def _on_folders(self, snapshot, *, context=None, row_menu=None):
         if not isValid(self) or not self._search_enabled:
             return
         if context is not None:
@@ -463,6 +467,7 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         for key in ('all', 'new', 'channels'):
             self.nav_buttons[key].setVisible(not folders)
         self._section = self._resolve_folder_section(self._section)
+        self._rebind_chat_row_menu(row_menu)
         if self._row_menu_context is not None and not self._chat_row_current(self._row_menu_context):
             self._cancel_chat_row_menu()
         showing_chats = (self._workspace_pages.currentWidget() == self.splitter
@@ -593,18 +598,18 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         self.state_dot.setToolTip(tip)
 
     def _on_auth_invalid(self) -> None:
-        """Сервер отверг сохранённый токен. Сессия уже очищена сервисом —
-        сообщаем и уводим на экран входа, а не виснем в «не в сети»."""
+        """MAX завершил или отверг сессию. Сохранённый вход сервис не удаляет —
+        сообщаем причину и уводим на экран входа, а не виснем в «не в сети»."""
         self._stop_incoming_presentation()
         self._stop_search()
         self._notifications.clear()
         if self._call_window is not None:
             self._call_window.close()
+        error = getattr(self.service, 'last_restore_error', None)
         QMessageBox.information(
             self,
             "Сессия завершена",
-            "Токен больше не действителен (истёк или сессия закрыта). "
-            "Войдите снова.",
+            session_ended_text(getattr(error, 'server_code', None)),
         )
         self.logged_out.emit()
 
@@ -770,7 +775,8 @@ class MainWindow(ContactProfileMixin, QMainWindow):
             return
         chat_id, user_id = row.get('chat_id'), row.get('user_id')
         chat = self._display_chat(chat_id)
-        if chat is None and chat_id is None and int64(user_id):
+        contact_hit = chat is None and chat_id is None and int64(user_id)
+        if contact_hit:
             chat = next((item for item in self.service.list_chats()
                          if not item.is_group and not item.is_channel and
                          item.peer_user_id == user_id), None)
@@ -782,6 +788,24 @@ class MainWindow(ContactProfileMixin, QMainWindow):
             self._close_conversation_info()
             self.chat_view.open_chat(chat, message_id=row.get('message_id'), time_ms=row.get('time_ms'))
             return
+        if contact_hit and callable(getattr(self.service, 'contact_context', None)):
+            # A person already known to this session (saved contact, own
+            # account, or a dialog hidden after deletion) has no sidebar row to
+            # open. Show the contact card; its explicit "Chat" action reads the
+            # real dialog. Unknown directory users still fall through below.
+            try:
+                self.service.contact_context(user_id)
+                known = True
+            except (AttributeError, ValueError):
+                known = False
+            if known:
+                self._show_chat_workspace()
+                self._close_conversation_info()
+                self._clear_previous_contact_chat()
+                if self._show_contact_profile_by_id(user_id):
+                    return
+            if self._bind_search_context() is not previous:
+                return
         # Directory hits don't join chats or manufacture an identity in SQLite.
         # A detached preview remains useful until that server flow is supported.
         preview = QMessageBox(QMessageBox.Icon.Information, 'Результат поиска', '', parent=self)
@@ -889,7 +913,82 @@ class MainWindow(ContactProfileMixin, QMainWindow):
                 pass
         return read, pin
 
+    def _row_state_token(self):
+        return (self._row_menu_context, self._row_menu_section, self._row_menu_folder_id,
+                self._row_read_context, self._row_pin_context, self._row_pin_state,
+                self._row_folder_rows, self._row_action_job, self._section,
+                self._selected_row_folder_id(), self._search_enabled)
+
+    @contextmanager
+    def _row_menu_pass(self):
+        """Share one entries projection while a row popup is built or revalidated.
+
+        Every row gate recomputed the whole conversation snapshot: about forty
+        snapshots per popup, each re-reading the chat and contact cache. Within
+        one synchronous GUI pass the projection is reused while the row state is
+        identical. Dispatch and worker checks run outside any pass and always
+        read fresh state.
+        """
+        if self._row_pass is not None:
+            yield
+            return
+        self._row_pass = (threading.get_ident(), [])
+        try:
+            yield
+        finally:
+            self._row_pass = None
+
+    def _rebind_chat_row_menu(self, request):
+        """Let an open popup follow its tab when its folder read completes navigation.
+
+        After a failed startup folder read the rail shows local tabs and the
+        popup has no folder. Its own folder read may then supply the complete
+        navigation, and the local "all"/"channels" tab becomes the canonical
+        folder. The popup used to close under the cursor; when that folder
+        still lists the chat, the popup is rebound to it instead. The caller
+        captures the pin context afterwards, as a new popup would. Any other
+        change, or a chat the folder does not list, still closes the popup.
+        Runs inside _on_folders: no exception may escape from here.
+        """
+        if not isinstance(request, tuple) or len(request) != 2:
+            return
+        context, previous = request
+        canonical = {'all': 'folder:all.chat.folder',
+                     'channels': 'folder:chat.channel.folder'}.get(previous)
+        folder_id = self._selected_row_folder_id()
+        if (canonical is None or self._section != canonical or folder_id is None
+                or context is None or context is not self._row_menu_context
+                or self._row_menu_section != previous or self._row_menu_folder_id is not None
+                or self._row_pin_context is not None or self._row_action_job is not None):
+            return
+        try:
+            # The canonical folder may list fewer chats than the local tab.
+            view = self.service.get_folder_view(self._folders[self._section])
+            listed = isinstance(view, dict) and context.chat_id in view.get('chatIds', [])
+        except Exception:
+            listed = False
+        if not listed:
+            return
+        self._row_menu_section = self._section
+        self._row_menu_folder_id = folder_id
+        self._row_pin_state = None
+        self._row_pin_job = None
+
     def _chat_row_entries(self, context, *, ignore_busy=False):
+        memo = self._row_pass
+        if memo is None or memo[0] != threading.get_ident():
+            return self._compute_chat_row_entries(context, ignore_busy=ignore_busy)
+        token = self._row_state_token()
+        for cached_context, busy, cached_token, entries in memo[1]:
+            if (cached_context is context and busy is ignore_busy
+                    and all(old is new or (type(old) is str and old == new)
+                            for old, new in zip(cached_token, token))):
+                return list(entries)
+        entries = self._compute_chat_row_entries(context, ignore_busy=ignore_busy)
+        memo[1].append((context, ignore_busy, token, entries))
+        return list(entries)
+
+    def _compute_chat_row_entries(self, context, *, ignore_busy=False):
         from .chat_row_menu import chat_row_entries
         if not self._chat_row_current(context):
             return []
@@ -1011,6 +1110,10 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         def finish(ok=False):
             if not current():
                 return
+            with self._row_menu_pass():
+                settle(ok)
+
+        def settle(ok):
             self._row_metadata_job = None
             entries = []
             if ok is True:
@@ -1088,26 +1191,32 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         self._row_folder_rows = None
         self._row_metadata_job = None
         self._row_metadata_failed = False
-        try:
-            entries = self._chat_row_entries(context)
-        except (AttributeError, ValueError, RuntimeError) as error:
-            self._log_chat_row_menu('cached_snapshot_failed', error)
-            entries = []
-        if not entries:
-            if not self._chat_row_current(context):
-                return None
-            self._row_metadata_failed = not callable(getattr(self.service, 'refresh_conversation_menu_metadata', None))
-            entries = self._chat_row_metadata_entries()
-        menu = ConversationActionsMenu(
-            context, entries, self, theme=self.settings.theme, native_rows=True,
-            unavailable_label=tr('Действие пока недоступно', self.settings.ui_language),
-            allowed=lambda row: self._chat_row_entry_allowed(row, context))
+        with self._row_menu_pass():
+            try:
+                entries = self._chat_row_entries(context)
+            except (AttributeError, ValueError, RuntimeError) as error:
+                self._log_chat_row_menu('cached_snapshot_failed', error)
+                entries = []
+            if not entries:
+                if not self._chat_row_current(context):
+                    return None
+                self._row_metadata_failed = not callable(getattr(self.service, 'refresh_conversation_menu_metadata', None))
+                entries = self._chat_row_metadata_entries()
+            menu = ConversationActionsMenu(
+                context, entries, self, theme=self.settings.theme, native_rows=True,
+                unavailable_label=tr('Действие пока недоступно', self.settings.ui_language),
+                allowed=lambda row: self._chat_row_entry_allowed(row, context))
         self._row_menu = menu
         menu.requested.connect(self._chat_row_menu_action)
-        menu.aboutToShow.connect(lambda: self._load_chat_row_metadata(context, menu))
-        menu.aboutToShow.connect(lambda: self._load_chat_row_folders(context, menu))
-        menu.aboutToShow.connect(lambda: self._load_chat_row_pin(context, menu))
+        menu.aboutToShow.connect(lambda: self._chat_row_menu_shown(context, menu))
         return menu
+
+    def _chat_row_menu_shown(self, context, menu):
+        # One pass: the three loaders share a single entries projection.
+        with self._row_menu_pass():
+            self._load_chat_row_metadata(context, menu)
+            self._load_chat_row_folders(context, menu)
+            self._load_chat_row_pin(context, menu)
 
     def _load_chat_row_pin(self, context, menu):
         pin_context = self._row_pin_context
@@ -1136,9 +1245,11 @@ class MainWindow(ContactProfileMixin, QMainWindow):
             self._row_pin_state = result
             self._apply_chat_row_pin_folder(context, pin_context, result)
             try:
-                entries = self._chat_row_entries(context)
-                if entries:
-                    menu.replace_entries(entries)
+                with self._row_menu_pass():
+                    entries = self._chat_row_entries(context)
+                    if entries:
+                        # In place: rebuilding the open popup collapsed it.
+                        menu.update_entries(entries)
             except (AttributeError, ValueError, RuntimeError):
                 menu.cancel()
 
@@ -1155,6 +1266,8 @@ class MainWindow(ContactProfileMixin, QMainWindow):
                 or not isinstance(folder.get('title'), str) or not isinstance(folder.get('favorites'), list)
                 or self._section not in self._folders):
             return
+        if self._folders[self._section] == folder:
+            return  # Already shown; a reload would only rebuild the chat list.
         self._folders[self._section] = copy.deepcopy(folder)
         self._schedule_reload()
 
@@ -1178,6 +1291,7 @@ class MainWindow(ContactProfileMixin, QMainWindow):
                 return
             self._row_folder_job = None
             rows = []
+            rebound = False
             if (failed or not isinstance(snapshot, dict) or snapshot.get('context') is not context
                     or not isinstance(snapshot.get('orderedFolders'), list)):
                 rows.append({'action': 'folder_retry', 'label': tr('Обновить папки', self.settings.ui_language),
@@ -1186,11 +1300,21 @@ class MainWindow(ContactProfileMixin, QMainWindow):
                 if not self._folders:
                     # Reuse this session-bound read after a failed/partial
                     # startup fetch. _on_folders accepts only a complete
-                    # navigation snapshot and revokes this fallback-bound
-                    # popup; a new popup must capture the actual folder ID.
-                    self._on_folders(snapshot, context=context.session_context)
+                    # navigation snapshot. A popup on a local tab that became
+                    # its canonical folder is rebound and captures the actual
+                    # folder ID for pinning; any other change revokes it.
+                    self._on_folders(snapshot, context=context.session_context,
+                                     row_menu=(context, self._section))
                     if not self._chat_row_current(context):
                         return
+                    rebound = self._row_menu_folder_id is not None
+                    if rebound:
+                        # Optional: without it the pin row stays unavailable.
+                        try:
+                            self._row_pin_context = self.service.capture_conversation_pin(
+                                context, self._row_menu_folder_id)
+                        except Exception:
+                            self._row_pin_context = None
                 for folder in snapshot['orderedFolders']:
                     if (not isinstance(folder, dict) or not isinstance(folder.get('id'), str)
                             or folder['id'] == 'all.chat.folder' or not isinstance(folder.get('title'), str)):
@@ -1209,18 +1333,23 @@ class MainWindow(ContactProfileMixin, QMainWindow):
             if not self._chat_row_current(context):
                 return
             self._row_folder_rows = rows
-            try:
-                folder = next((entry for entry in self._chat_row_entries(context)
-                               if entry.get('action') == 'folder'), None)
-            except (AttributeError, ValueError, RuntimeError):
-                menu.cancel()
-                return
-            if folder is not None:
-                for _action, descriptor, submenu in menu._rows:
-                    if descriptor.get('action') == 'folder' and submenu is not None:
-                        submenu.replace_entries(folder.get('children', []))
-                        break
-            menu.revalidate()
+            with self._row_menu_pass():
+                try:
+                    folder = next((entry for entry in self._chat_row_entries(context)
+                                   if entry.get('action') == 'folder'), None)
+                except (AttributeError, ValueError, RuntimeError):
+                    menu.cancel()
+                    return
+                if folder is not None:
+                    for _action, descriptor, submenu in menu._rows:
+                        if descriptor.get('action') == 'folder' and submenu is not None:
+                            submenu.replace_entries(folder.get('children', []))
+                            break
+                menu.revalidate()
+                if rebound:
+                    # The popup now has a folder: read its pin state, as a
+                    # popup opened on that folder does when it is shown.
+                    self._load_chat_row_pin(context, menu)
 
         # The service read validates the captured owner/client/session itself;
         # stale callbacks cannot update an already dismissed or replaced menu.
@@ -1238,6 +1367,9 @@ class MainWindow(ContactProfileMixin, QMainWindow):
         return current(context) and bot_delete_available(snapshot, context, continuation=continuation)
 
     def _chat_row_menu_action(self, action, value, context):
+        # Dispatch is always checked against fresh state, never against a popup
+        # pass projection (no pass runs a nested event loop; this keeps it so).
+        self._row_pass = None
         if (not self._chat_row_current(context) or self._row_action_job is not None
                 or not self._chat_row_entry_allowed({'action': action, 'value': value}, context)):
             return
@@ -1395,7 +1527,8 @@ class MainWindow(ContactProfileMixin, QMainWindow):
             if not self._chat_row_current(context):
                 return
             if self._row_menu is not None and isValid(self._row_menu):
-                self._row_menu.revalidate()
+                with self._row_menu_pass():
+                    self._row_menu.revalidate()
             self._schedule_reload()
             read, pin = self._chat_row_control_states(context)
             bot_status = bot_result or bot_delete_state(snapshot, context)
@@ -2389,28 +2522,39 @@ class MainWindow(ContactProfileMixin, QMainWindow):
                 callback()
             return triggered
 
+        # dispatch() drops every click without a confirmed session context, so
+        # such entries are shown disabled with a reason instead of doing nothing.
+        ready = self._search_enabled and context is not None
+        reason = (tr('Нужна подтверждённая WEB-сессия MAX. Дождитесь подключения и откройте меню снова.',
+                     language) if self._search_enabled and context is None else '')
+
+        def gate(action):
+            action.setEnabled(ready)
+            if reason:
+                action.setToolTip(reason)
+
         if contacts:
             add = menu.addAction(line_icon('plus'), tr('Добавить контакт', language))
-            add.setEnabled(self._search_enabled)
+            gate(add)
             add.triggered.connect(dispatch(self._open_contact_create))
         for kind, icon, label in [('channel', 'channels', 'Создать канал'),
                                   ('group', 'contacts', 'Создать группу')]:
             action = menu.addAction(line_icon(icon), tr(label, language))
-            action.setEnabled(self._search_enabled)
+            gate(action)
             action.triggered.connect(dispatch(lambda kind=kind: self._open_conversation_create(kind)))
         call = menu.addAction(line_icon('phone'), tr('Создать групповой звонок', language))
         call.setEnabled(False)
         call.setToolTip(tr('Пока недоступно', language))
         find = menu.addAction(line_icon('search'), tr('Найти по номеру', language))
-        find.setEnabled(self._search_enabled)
+        gate(find)
         find.triggered.connect(dispatch(self._open_phone_lookup))
         invite = menu.addAction(line_icon('link'), tr('Пригласить по ссылке', language))
-        invite.setEnabled(self._search_enabled)
+        gate(invite)
         invite.triggered.connect(dispatch(lambda: self._copy_invitation(context)))
         if contacts:
             menu.addSeparator()
             local = menu.addAction(tr('Управление локальными контактами…', language))
-            local.setEnabled(self._search_enabled)
+            gate(local)
             local.triggered.connect(dispatch(self._open_contact_manager))
         return menu
 
@@ -2548,9 +2692,13 @@ class MainWindow(ContactProfileMixin, QMainWindow):
     def _copy_invitation(self, context):
         if not isValid(self) or not self._search_enabled:
             return
-        from .invite_link import copy_invitation, show_menu_notice
+        from .invite_link import (INVITE_UNAVAILABLE_NOTICE, InviteLinkUnavailable,
+                                  copy_invitation, show_menu_notice)
         try:
             copy_invitation(self.service, context=context)
+        except InviteLinkUnavailable:
+            show_menu_notice(self, tr(INVITE_UNAVAILABLE_NOTICE, self.settings.ui_language))
+            return
         except (AttributeError, ValueError, RuntimeError):
             show_menu_notice(self, tr('Не удалось скопировать приглашение. Проверьте соединение с MAX и повторите действие.', self.settings.ui_language))
             return

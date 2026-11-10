@@ -17,6 +17,23 @@ A_FILE = "FILE"
 A_STICKER = "STICKER"
 A_CONTROL = "CONTROL"
 
+# Captions for CONTROL events whose name alone states what happened. The names
+# follow the attachment schema family and are NOT confirmed against a live MAX
+# session; any other event (including 'new'/'hello') keeps the generic caption.
+_CONTROL_EVENT_CAPTIONS = {
+    'add': 'Добавлены участники',
+    'remove': 'Участник удалён из чата',
+    'leave': 'Участник покинул чат',
+    'joinByLink': 'Участник присоединился по ссылке',
+    'title': 'Название чата изменено',
+    'icon': 'Фото чата изменено',
+}
+
+
+def control_event_caption(event) -> str:
+    """Plain caption of one CONTROL event; never raw type names or user text."""
+    return _CONTROL_EVENT_CAPTIONS.get(event, 'Системное сообщение') if isinstance(event, str) else 'Системное сообщение'
+
 
 def _to_int(v: Any) -> Optional[int]:
     if v is None or isinstance(v, bool):
@@ -206,9 +223,13 @@ class Attach:
             A_AUDIO: "Голосовое сообщение",
             A_FILE: self.file_name or "Файл",
             A_STICKER: "Стикер",
-            A_CONTROL: "Системное сообщение",
+            A_CONTROL: control_event_caption(self.control_event),
             'INLINE_KEYBOARD': "Кнопки сообщения",
             'SHARE': self.share_title or "Ссылка",
+            'CONTACT': f"Контакт: {self.file_name}" if self.file_name else "Контакт",
+            'LOCATION': "Геопозиция",
+            'CALL': "Звонок",
+            'MUSIC': "Аудиозапись",
         }.get(self.type, self.file_name or "Вложение")
 
 

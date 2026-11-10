@@ -12,7 +12,6 @@ tools under `tools/`:
 ```powershell
 py -3.11 -m venv .venv
 .venv\Scripts\python -m pip install -r tools/requirements-build.lock
-.venv\Scripts\python tools/run_public_tests.py --source . --out artifacts/test01
 .venv\Scripts\python tools/build_public.py --source . --out artifacts/build01
 ```
 
@@ -47,3 +46,4 @@ branch. Publishing a release should be a separate explicit workflow/environment
 gate; do not upload to a store or GitHub Release merely because a push occurred.
 Pin third-party Actions by reviewed commit SHA. No signing credentials belong
 in the source tree or artifact; configured signing must use protected CI secrets.
+

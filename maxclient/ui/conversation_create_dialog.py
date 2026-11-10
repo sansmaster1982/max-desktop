@@ -6,7 +6,7 @@ from weakref import WeakKeyDictionary
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
     QPlainTextEdit, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 from shiboken6 import isValid
@@ -64,6 +64,23 @@ def _local_validation_error(error, limits):
 # Keep a queued/uncertain operation bound to its service even if its window closes.
 # The service separately persists network writes; this also covers the queue gap.
 _UI_WRITES = WeakKeyDictionary()
+
+
+def _confirm_release(parent, language, title):
+    """Explicit warning before forgetting an unconfirmed create; Cancel is default."""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setWindowTitle(tr('Снять блокировку создания', language))
+    box.setText(tr('MAX не подтвердил предыдущее создание «{title}». Возможно, чат уже создан: '
+                   'сначала проверьте список чатов. Снять блокировку? Повторный запрос не отправляется.',
+                   language, title=title))
+    release = box.addButton(tr('Снять блокировку', language), QMessageBox.ButtonRole.DestructiveRole)
+    cancel = box.addButton(tr('Отмена', language), QMessageBox.ButtonRole.RejectRole)
+    box.setDefaultButton(cancel)
+    box.setEscapeButton(cancel)
+    box.exec()
+    return box.clickedButton() is release
 
 
 def _create(service, values, context, verify=False):
@@ -149,8 +166,11 @@ class ConversationCreateDialog(QDialog):
         self.verify_button.clicked.connect(self._verify)
         self.open_button = QPushButton(self._tr('Открыть созданный чат'))
         self.open_button.clicked.connect(self._open_confirmed)
+        # Only for a journal without a server chat ID; never resends anything.
+        self.release_button = QPushButton(self._tr('Снять блокировку…'))
+        self.release_button.clicked.connect(self._release)
         for button in (self.cancel_button, self.back_button, self.next_button,
-                       self.create_button, self.verify_button, self.open_button):
+                       self.create_button, self.verify_button, self.open_button, self.release_button):
             button.setMinimumHeight(44)
             button.setAutoDefault(False)
             buttons.addWidget(button)
@@ -159,6 +179,7 @@ class ConversationCreateDialog(QDialog):
         self.open_button.setObjectName('Primary')
         self.verify_button.hide()
         self.open_button.hide()
+        self.release_button.hide()
         root.addLayout(buttons)
         self.finished.connect(self._finished)
         if kind == 'group' and self._current():
@@ -194,7 +215,8 @@ class ConversationCreateDialog(QDialog):
         for button, source in ((self.cancel_button, self._cancel_source),
                                (self.back_button, 'Назад'), (self.next_button, 'Далее'),
                                (self.create_button, title), (self.verify_button, 'Проверить результат'),
-                               (self.open_button, 'Открыть созданный чат')):
+                               (self.open_button, 'Открыть созданный чат'),
+                               (self.release_button, 'Снять блокировку…')):
             button.setText(self._tr(source))
         source, values = self._member_hint_source
         self.member_hint.setText(self._tr(source, **values))
@@ -464,6 +486,7 @@ class ConversationCreateDialog(QDialog):
             lease = {'context': context, 'running': True}
             _UI_WRITES[self.service] = lease
         self._enable_fields(False)
+        self.release_button.hide()
         for button in (self.create_button, self.next_button, self.back_button,
                        self.verify_button, self.open_button):
             button.setEnabled(False)
@@ -533,6 +556,49 @@ class ConversationCreateDialog(QDialog):
         can_verify = isinstance(pending, dict) and pending.get('has_chat_id') is True
         self.verify_button.setVisible(can_verify)
         self.verify_button.setEnabled(can_verify and self._current() and self._request is None)
+        can_release = self._releasable(pending)
+        self.release_button.setVisible(can_release)
+        self.release_button.setEnabled(can_release)
+
+    def _releasable(self, pending):
+        # A synthesized UI lease or a running worker has no journal to release.
+        lease = _UI_WRITES.get(self.service)
+        return (isinstance(pending, dict) and pending.get('has_chat_id') is False
+                and type(pending.get('cid')) is int and self._request is None
+                and self._confirmed_chat is None and self._current()
+                and not (lease is not None and lease['running']))
+
+    def _release(self):
+        """Forget only the local no-ID journal after an explicit warning. No RPC."""
+        if not self._current():
+            self._expire()
+            return
+        pending = self._pending()
+        if not self._releasable(pending):
+            return
+        if not _confirm_release(self, self.language, pending.get('title') or ''):
+            return
+        if not self._current() or not self._releasable(self._pending()):
+            return
+        try:
+            self.service.release_unconfirmed_conversation_creation(context=self._context, cid=pending['cid'])
+        except Exception:
+            self._message('Не удалось снять блокировку. Откройте создание заново.')
+            return
+        lease = _UI_WRITES.get(self.service)
+        if lease is not None and lease['context'] is self._context and not lease['running']:
+            del _UI_WRITES[self.service]
+        if self._pending() is not None:
+            self._restore_pending()
+            return
+        self._uncertain = False
+        self.release_button.hide()
+        self.verify_button.hide()
+        self._cancel_source = 'Отменить' if self.kind == 'group' else 'Не создавать'
+        self.cancel_button.setText(self._tr(self._cancel_source))
+        self._enable_fields(True)
+        self._show_page(0 if self.kind == 'group' else 1)
+        self._message('Блокировка снята. Повторный запрос не отправлялся; можно создать новый чат.')
 
     def _open_confirmed(self):
         if not self._current():
@@ -561,7 +627,7 @@ class ConversationCreateDialog(QDialog):
         self.member_list.blockSignals(False)
         self._member_ids.clear()
         for button in (self.next_button, self.back_button, self.create_button,
-                       self.verify_button, self.open_button):
+                       self.verify_button, self.open_button, self.release_button):
             button.setEnabled(False)
         self._message('Сессия изменилась. Откройте создание заново.')
 

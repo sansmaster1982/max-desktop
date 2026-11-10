@@ -1,4 +1,6 @@
 """Owner-bound search reads. Results are detached from joined-chat history/cache."""
+import re
+
 from ..protocol.client import AuthenticatedSession
 
 
@@ -8,6 +10,35 @@ class SearchUnavailable(ValueError):
 
 def _text(value):
     return value if isinstance(value, str) else ''
+
+
+def _fold(value):
+    """Case-insensitive comparison key; the Cyrillic yo/ye pair is one letter."""
+    return _text(value).casefold().replace('ё', 'е')
+
+
+def _phone_needles(query, minimum=1):
+    """Digit variants of a query typed as a phone (+7/8, spaces, dashes, brackets)."""
+    if not isinstance(query, str) or re.search(r'[^\d\s()+.\-]', query):
+        return ()
+    digits = re.sub(r'\D', '', query)
+    if len(digits) < minimum:
+        return ()
+    variants = [digits]
+    if digits[0] == '8' and len(digits) > 1 and not query.lstrip().startswith('+'):
+        variants.append('7' + digits[1:])  # Domestic 8 prefix of a stored +7 number.
+    return tuple(variants)
+
+
+def contact_matches(query, display, phone, *, minimum_digits=1):
+    """Return 'name', 'phone' or None for one address-book row; no I/O."""
+    needle = _fold(query).strip()
+    if needle and needle in _fold(display):
+        return 'name'
+    digits = re.sub(r'\D', '', phone) if isinstance(phone, str) else ''
+    if digits and any(value in digits for value in _phone_needles(query, minimum_digits)):
+        return 'phone'
+    return None
 
 
 def _contact_name(contact):
@@ -70,6 +101,49 @@ class SearchServiceMixin:
         if client is not self.client or self.search_context() is not context:
             raise SearchUnavailable('Сессия изменилась. Результаты поиска не применены.')
 
+    def _local_contact_hits(self, query):
+        """Address-book rows of this owner matched by saved name or phone.
+
+        The server search knows neither a local alias nor a saved number, and a
+        contact without a sidebar row has no chat title to match. This is a
+        cache read: the hit keeps its actual user ID and gets a chat ID only
+        from an existing confirmed dialog. No chat, contact or message is made.
+        """
+        lister = getattr(self, 'list_contacts', None)
+        resolver = getattr(self, 'dialog_for_contact', None)
+        if not callable(lister):
+            return []
+        try:
+            contacts = lister()
+        except (AttributeError, ValueError):
+            return []
+        rows = []
+        for contact in contacts:
+            identity = getattr(contact, 'id', None)
+            if type(identity) is not int or not -(2**63) <= identity < 2**63:
+                continue
+            title = _text(getattr(contact, 'display', None))
+            phone = _text(getattr(contact, 'phone', None))
+            matched = contact_matches(query, title, phone, minimum_digits=4)
+            if matched is None:
+                continue
+            try:
+                dialog = resolver(identity) if callable(resolver) else None
+            except (AttributeError, ValueError):
+                dialog = None
+            preview = phone if matched == 'phone' else ''
+            if dialog is not None:
+                row = _item(section='CHATS', chat_id=dialog.id, cached=dialog)
+                row['preview'] = preview
+            else:
+                row = {'key': f'contact:{identity}', 'section': 'CONTACTS',
+                       'title': title or f'Контакт {identity}', 'preview': preview,
+                       'chat_id': None, 'message_id': None, 'user_id': identity, 'time_ms': None}
+            rows.append(row)
+            if len(rows) >= 20:
+                break
+        return rows
+
     def search_all(self, query, *, marker=None, context=None):
         """Actual WEB initial68+60; only68 cursor is followed on later pages."""
         if not isinstance(query, str):
@@ -95,10 +169,11 @@ class SearchServiceMixin:
             self._check_search_context(client, context)
         items = []
         if marker is None:
-            folded = query.casefold()
+            folded = _fold(query)
             for chat in known.values():
-                if folded in chat.display.casefold():
+                if folded in _fold(chat.display):
                     items.append(_item(section='CHATS', chat_id=chat.id, cached=chat))
+            items.extend(self._local_contact_hits(query))
         unavailable = 0
         for row in messages['result']:
             if row.get('unavailable'):

@@ -26,9 +26,37 @@ from .. import __app_name__
 from ..core.config import Settings
 from ..core.service import MaxService
 from ..core.token_import import read_web_session
+from ..protocol.errors import MaxLoginFailed
 from .assets import logo_pixmap
 from .async_runner import run_async
 from .qr_login_panel import QrLoginPanel
+
+# Why the saved sign-in did not open. The saved credential is never removed here.
+SESSION_ENDED_TEXT = (
+    "MAX завершил эту сессию MAXIM: например, вход завершили с другого устройства "
+    "или истёк её срок. Сообщения и настройки на этом компьютере сохранены. "
+    "Войдите снова по SMS или QR-коду."
+)
+RESTORE_UNREACHABLE_TEXT = (
+    "Не удалось связаться с MAX: сервер не ответил или нет подключения к интернету. "
+    "Сохранённый вход не удалён. Нажмите «Повторить», когда связь восстановится."
+)
+
+
+def session_ended_text(code: Optional[str] = None) -> str:
+    """MAX ended or refused this session; its error code is appended when known."""
+    if isinstance(code, str) and code:
+        return f"{SESSION_ENDED_TEXT} (Код ошибки MAX: {code})"
+    return SESSION_ENDED_TEXT
+
+
+def restore_failure_text(error) -> tuple[Optional[str], bool]:
+    """Text for a failed saved-session restore and whether «Повторить» is offered."""
+    if error is None:
+        return None, False
+    if isinstance(error, MaxLoginFailed):
+        return session_ended_text(getattr(error, "server_code", None)), False
+    return RESTORE_UNREACHABLE_TEXT, True
 
 
 class _Step(Enum):
@@ -134,6 +162,13 @@ class LoginWindow(QWidget):
         )
         self.error.hide()
         col.addWidget(self.error)
+
+        # Shown only with RESTORE_UNREACHABLE_TEXT: one restore per click.
+        self.retry_restore = QPushButton("Повторить")
+        self.retry_restore.setObjectName("RetryRestoreButton")
+        self.retry_restore.clicked.connect(self._retry_restore)
+        self.retry_restore.hide()
+        col.addWidget(self.retry_restore)
 
         self.phone = QLineEdit()
         self.phone.setPlaceholderText("+7 999 123-45-67")
@@ -248,6 +283,7 @@ class LoginWindow(QWidget):
         self.btn_qr.setDisabled(busy)
         self.import_session.setDisabled(busy)
         self.resend.setDisabled(busy)
+        self.retry_restore.setDisabled(busy)
         self.primary.setText("…" if busy else self.primary.text())
         if not busy:
             self._render()
@@ -258,6 +294,13 @@ class LoginWindow(QWidget):
             self.error.show()
         else:
             self.error.hide()
+            self.retry_restore.hide()
+
+    def show_restore_error(self, error) -> None:
+        """Explain why the saved sign-in did not open; network errors offer «Повторить»."""
+        text, retry = restore_failure_text(error)
+        self._set_error(text)
+        self.retry_restore.setVisible(retry)
 
     # ───────────────────────── actions ─────────────────────────
 
@@ -385,6 +428,25 @@ class LoginWindow(QWidget):
         self.service.log("login_window: emit logged_in")
         self._set_busy(False)
         self.logged_in.emit()
+
+    def _retry_restore(self) -> None:
+        """Restore the saved sign-in once per click; nothing retries automatically."""
+        if self._busy:
+            return
+        self.service.log("login_window: restore retry")
+        self._set_busy(True)
+        self._watchdog.start()
+        run_async(self.service.try_restore, on_done=self._on_restore_retry_done,
+                  on_error=lambda _message: self._on_restore_retry_done(False))
+
+    def _on_restore_retry_done(self, ok) -> None:
+        if ok is True:
+            self._set_error(None)
+            self._emit_ok()
+            return
+        self._watchdog.stop()
+        self._set_busy(False)
+        self.show_restore_error(getattr(self.service, "last_restore_error", None))
 
     def _on_watchdog(self) -> None:
         if not self._busy:

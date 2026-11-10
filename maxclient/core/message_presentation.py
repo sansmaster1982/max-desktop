@@ -37,7 +37,8 @@ def literal_link_html(text):
     """Return escaped rich text only when an actual safe web URL is present."""
     fragments, offset, found = [], 0, False
     for match in _URL.finditer(text):
-        candidate = match.group(0).rstrip('.,;:!?')
+        # Closing typographic quotes/ellipsis after a URL belong to the sentence.
+        candidate = match.group(0).rstrip('.,;:!?»“”’…')
         # A balanced parenthesis can be part of the URL; sentence punctuation isn't.
         while candidate.endswith(')') and candidate.count(')') > candidate.count('('):
             candidate = candidate[:-1]

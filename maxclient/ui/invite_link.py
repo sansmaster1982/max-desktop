@@ -3,7 +3,11 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel
 from shiboken6 import isValid
 
+from ..protocol.invite_link_contracts import InviteLinkUnavailable
 from .widgets.line_icon import line_icon
+
+# Shown instead of the generic connection hint when the session simply has no text.
+INVITE_UNAVAILABLE_NOTICE = 'Не удалось скопировать приглашение: MAX не передал текст приглашения для этой сессии.'
 
 
 def copy_invitation(service, *, context):
@@ -14,7 +18,9 @@ def copy_invitation(service, *, context):
     text = service.invite_link_text(context=context)
     if service.search_context() != context:
         raise ValueError('Сессия MAX изменилась. Повторите действие.')
-    if not isinstance(text, str) or not text.strip():
+    if isinstance(text, str) and not text.strip():
+        raise InviteLinkUnavailable('MAX пока не передал текст приглашения. Переподключитесь и попробуйте снова.')
+    if not isinstance(text, str):
         raise ValueError('MAX пока не передал текст приглашения. Переподключитесь и попробуйте снова.')
     QApplication.clipboard().setText(text)
 

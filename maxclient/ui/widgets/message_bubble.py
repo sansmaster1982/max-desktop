@@ -48,7 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...core.models import Attach, Message
+from ...core.models import Attach, Message, control_event_caption
 from ...core.i18n import normalize_language, tr
 from ...core.message_presentation import normalized_button_rows, safe_web_url
 from ..message_links import open_web_link, set_literal_message_text
@@ -60,7 +60,7 @@ from .chat_list_item import _ElidedLabel
 from .line_icon import line_icon
 from ..timeline_photos import PhotoPreview, photo_identity
 
-_STATUS = {"pending": "🕓", "sent": "✓", "failed": "⚠"}
+_STATUS = {"pending": "🕓", "sent": "✓", "failed": "⚠", "unknown": "?"}
 _ICON = {"PHOTO": "🖼", "VIDEO": "🎬", "VIDEO_MSG": "🎬", "AUDIO": "🎤", "FILE": "📎", "STICKER": "🌟"}
 
 
@@ -232,7 +232,8 @@ class MessageBubble(QWidget):
             control_caption = (first.control_message if getattr(first, 'control_metadata_confirmed', False) is True
                                and getattr(first, 'control_event', None) == 'system'
                                and isinstance(getattr(first, 'control_message', None), str)
-                               and first.control_message else 'Системное сообщение')
+                               and first.control_message
+                               else control_event_caption(getattr(first, 'control_event', None)))
 
         for index, attach in enumerate(selected_attaches):
             if attach.type in ('CONTROL', 'INLINE_KEYBOARD'):

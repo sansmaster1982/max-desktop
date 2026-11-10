@@ -10,15 +10,15 @@ MAXIM - настольный клиент MAX для Windows на Python и PySi
 
 ### Готовая программа для Windows
 
-1. [Скачайте ZIP с готовой программой](https://github.com/sansmaster1982/max-desktop/releases/download/v1.1.0-alpha.2/MAXIM-1.1.0-alpha.2-windows-x64.zip).
+1. [Скачайте ZIP с готовой программой](https://github.com/sansmaster1982/max-desktop/releases/download/v1.1.0-alpha.3/MAXIM-1.1.0-alpha.3-windows-x64.zip).
 2. Распакуйте ZIP в любую папку. Не запускайте EXE прямо из архива.
 3. Откройте `MAXIM.exe` в распакованной папке. Рядом с ним должна оставаться папка `_internal`.
 
-Эту же сборку можно посмотреть в папке **[MAXIM-Windows](MAXIM-Windows/)** в корне репозитория. Для скачивания удобнее ZIP: GitHub не даёт скачать папку одной кнопкой. [Страница выпуска](https://github.com/sansmaster1982/max-desktop/releases/tag/v1.1.0-alpha.2) содержит файлы и сведения об их проверке. Старые `MAX Desktop.exe` относятся к историческим версиям.
+Эту же сборку можно посмотреть в папке **[MAXIM-Windows](MAXIM-Windows/)** в корне репозитория. Для скачивания удобнее ZIP: GitHub не даёт скачать папку одной кнопкой. [Страница выпуска](https://github.com/sansmaster1982/max-desktop/releases/tag/v1.1.0-alpha.3) содержит файлы и сведения об их проверке. Старые `MAX Desktop.exe` относятся к историческим версиям.
 
 ### Запуск из Python
 
-Понадобятся Windows x64 и Python 3.11. Скачайте [ZIP с исходным кодом MAXIM](https://github.com/sansmaster1982/max-desktop/releases/download/v1.1.0-alpha.2/MAXIM-1.1.0-alpha.2-source.zip) и распакуйте его. В папке с файлом `run.py` откройте PowerShell и выполните:
+Понадобятся Windows x64 и Python 3.11. Скачайте [ZIP с исходным кодом MAXIM](https://github.com/sansmaster1982/max-desktop/releases/download/v1.1.0-alpha.3/MAXIM-1.1.0-alpha.3-source.zip) и распакуйте его. В папке с файлом `run.py` откройте PowerShell и выполните:
 
 ```powershell
 py -3.11 -m venv .venv

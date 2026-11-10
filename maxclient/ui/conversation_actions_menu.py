@@ -41,6 +41,18 @@ def _value_copy(value, depth=0):
     raise ValueError('menu value is not plain structured data')
 
 
+def _entry_shape(entries):
+    """Separators and submenu nesting, exactly as _populate builds them."""
+    shape = []
+    for row in entries if isinstance(entries, list) else []:
+        if not isinstance(row, dict) or not isinstance(row.get('label'), str):
+            continue
+        children = row.get('children')
+        shape.append((row.get('separator_before') is True,
+                      _entry_shape(children) if isinstance(children, list) else None))
+    return tuple(shape)
+
+
 class ConversationActionsMenu(QMenu):
     requested = Signal(str, object, object)  # action, value, opaque context
 
@@ -129,14 +141,83 @@ class ConversationActionsMenu(QMenu):
         """Replace an open lazy submenu only; old actions are disconnected."""
         if not isValid(self) or self._revoked:
             return
-        for child in self._submenus:
-            child.cancel()
-            child.deleteLater()
-        self.clear()
-        self._rows = []
-        self._submenus = []
-        self._populate(entries if isinstance(entries, list) else [])
-        self.apply_theme(self._theme)
+        # A visible QMenu resizes its native popup on every removed and added
+        # action, so a rebuild briefly showed it collapsed to a few pixels.
+        # Hold the current size during the rebuild, then resize once.
+        held = (self.minimumSize(), self.maximumSize()) if self.isVisible() else None
+        if held is not None:
+            self.setFixedSize(self.size())
+        try:
+            for child in self._submenus:
+                child.cancel()
+                child.deleteLater()
+            self.clear()
+            self._rows = []
+            self._submenus = []
+            self._populate(entries if isinstance(entries, list) else [])
+            self.apply_theme(self._theme)
+        finally:
+            if held is not None and isValid(self):
+                self.setMinimumSize(held[0])
+                self.setMaximumSize(held[1])
+                self.resize(self.sizeHint())
+
+    def _shape(self):
+        return tuple((row.get('separator_before') is True,
+                      submenu._shape() if submenu is not None else None)
+                     for _action, row, submenu in self._rows)
+
+    def update_entries(self, entries):
+        """Refresh an open popup in place when only labels, values or gates changed.
+
+        Clearing a visible QMenu resizes the native popup once per removed and
+        added action, so the open menu collapses to a few pixels and grows back.
+        With the same rows and submenus every QAction stays; its descriptor dict
+        is updated in place, so the triggered lambda and submenu gates read the
+        new values. A different shape still rebuilds.
+        """
+        if not isValid(self) or self._revoked:
+            return
+        entries = entries if isinstance(entries, list) else []
+        if (_entry_shape(entries) != self._shape()
+                or any(child._revoked for child in self._submenus)):
+            self.replace_entries(entries)
+            return
+        self._update_rows(entries)
+        self.revalidate()
+
+    def _update_rows(self, entries):
+        palette = palette_for(self._theme)
+        rows = [value for value in entries
+                if isinstance(value, dict) and isinstance(value.get('label'), str)]
+        for (action, row, submenu), value in zip(self._rows, rows):
+            fresh = dict(value)
+            if submenu is None:
+                valid = isinstance(fresh.get('action'), str) and bool(fresh['action'])
+                try:
+                    fresh['value'] = _value_copy(fresh.get('value'))
+                except ValueError:
+                    valid = False
+                fresh['_valid'] = valid
+            icon = (row.get('icon'), row.get('danger'))
+            row.clear()
+            row.update(fresh)
+            label = self._display_label(row).replace('&', '&&')
+            if submenu is not None:
+                submenu.setTitle(label)
+                submenu._update_rows(row['children'])
+            else:
+                action.setText(label)
+                checkable = type(row.get('checked')) is bool
+                action.setCheckable(checkable)
+                if checkable:
+                    action.setChecked(row['checked'])
+            if (row.get('icon'), row.get('danger')) != icon:
+                if isinstance(row.get('icon'), str):
+                    action.setIcon(line_icon(row['icon'], '#F15D6B' if row.get('danger') else palette.text_dim, 18))
+                    action.setIconVisibleInMenu(True)
+                else:
+                    action.setIcon(QIcon())
 
     def revalidate(self):
         if not isValid(self):
@@ -208,6 +289,7 @@ class ConversationActionsMenu(QMenu):
     def _activate(self, action, row):
         if (not isValid(self) or not isValid(action) or self._revoked or
                 not (self.isVisible() or self._dispatch_depth) or
+                (not self._dispatch_depth and self._ancestor_revoked()) or
                 row.get('_valid') is not True or row.get('available') is not True or
                 not self._allowed(row)):
             return
@@ -233,9 +315,26 @@ class ConversationActionsMenu(QMenu):
     def hideEvent(self, event):  # noqa: N802
         # Native QMenu hides BEFORE emitting triggered. A real click/Enter is
         # allowed only during that exact dispatch; outside hides revoke it.
-        if not self._dispatch_depth:
+        # A submenu also hides whenever the pointer moves to another row of
+        # its still open parent; revoking it then left the row dead until the
+        # popup was rebuilt. A hidden submenu cannot dispatch anyway (_activate
+        # requires visibility or a dispatch, and a live parent outside one).
+        if not self._dispatch_depth and not self._parent_menu_open():
             self._revoked = True
         super().hideEvent(event)
+
+    def _parent_menu_open(self):
+        parent = self.parent()
+        return (isinstance(parent, ConversationActionsMenu) and isValid(parent)
+                and not parent._revoked and parent.isVisible())
+
+    def _ancestor_revoked(self):
+        parent = self.parent()
+        while isinstance(parent, ConversationActionsMenu):
+            if not isValid(parent) or parent._revoked:
+                return True
+            parent = parent.parent()
+        return False
 
     def mouseReleaseEvent(self, event):  # noqa: N802
         if self._anchor_press_consumed:
@@ -247,7 +346,7 @@ class ConversationActionsMenu(QMenu):
             super().mouseReleaseEvent(event)
         finally:
             self._dispatch_depth -= 1
-            if isValid(self) and not self.isVisible():
+            if isValid(self) and not self.isVisible() and not self._parent_menu_open():
                 self._revoked = True
 
     def mousePressEvent(self, event):  # noqa: N802
@@ -266,7 +365,8 @@ class ConversationActionsMenu(QMenu):
         super().mousePressEvent(event)
 
     def keyPressEvent(self, event):  # noqa: N802
-        if event.key() == Qt.Key.Key_Escape:
+        # Escape in a submenu only steps back to its open parent (native QMenu).
+        if event.key() == Qt.Key.Key_Escape and not self._parent_menu_open():
             self.cancel()
             event.accept()
             return
@@ -275,7 +375,7 @@ class ConversationActionsMenu(QMenu):
             super().keyPressEvent(event)
         finally:
             self._dispatch_depth -= 1
-            if isValid(self) and not self.isVisible():
+            if isValid(self) and not self.isVisible() and not self._parent_menu_open():
                 self._revoked = True
 
     def apply_theme(self, theme):
