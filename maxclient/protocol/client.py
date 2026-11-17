@@ -30,7 +30,7 @@ from .codec import (
     parse_header,
     unpack_payload,
 )
-from .errors import MaxError, MaxLoginFailed, MaxNotConnected, MaxTimeout
+from .errors import MaxError, MaxLoginFailed, MaxNotConnected, MaxTimeout, MaxUploadError
 from .settings_contracts import privacy_values, user_setting_values
 from .search_contracts import (build_message_search, parse_message_search,
                                build_global_search, parse_global_search)
@@ -126,6 +126,30 @@ class _Pending:
         self.expected_socket = expected_socket
 
 
+class _AttachWaiter:
+    """One upload waiting for MAX's attachment-ready push (NOTIF_ATTACH 136)."""
+    __slots__ = ("key", "event", "error", "_release")
+
+    def __init__(self, key: tuple[str, int], release: Callable[["_AttachWaiter"], None]) -> None:
+        self.key = key
+        self.event = threading.Event()
+        # None = ready; "processing" = MAX reported an error; "connection" = link lost.
+        self.error: Optional[str] = None
+        self._release = release
+
+    def wait(self, timeout: float) -> None:
+        """Return once MAX reports the attachment ready, otherwise raise MaxUploadError."""
+        if not self.event.wait(timeout):
+            raise MaxUploadError("Сервер не подтвердил готовность вложения. Повторите отправку позже.")
+        if self.error == "connection":
+            raise MaxUploadError("Соединение прервалось до подтверждения вложения. Повторите отправку.")
+        if self.error is not None:
+            raise MaxUploadError("Сервер не смог обработать вложение.")
+
+    def cancel(self) -> None:
+        self._release(self)
+
+
 class _WebSocketTransport:
     """Binary stream adapter for the official WEB transport, with verified TLS."""
 
@@ -215,6 +239,14 @@ class MaxClient:
         self._seq = 0
         self._pending: dict[int, _Pending] = {}
         self._pending_lock = threading.Lock()
+        # Uploads waiting for NOTIF_ATTACH, keyed by (id field, id). The official
+        # WEB client stores the id before the HTTP upload starts; so do we.
+        self._attach_waiters: dict[tuple[str, int], _AttachWaiter] = {}
+        self._attach_lock = threading.Lock()
+        # Generation of uploads. It changes when this client is closed, when MAX ends
+        # the session and on a user-initiated connect: an upload started before that
+        # belongs to a session that no longer exists and must stop.
+        self._upload_epoch = 0
         self._closed = False
         self._state = ConnectionState.DISCONNECTED
 
@@ -274,6 +306,11 @@ class MaxClient:
         return self._token
 
     @property
+    def upload_epoch(self) -> int:
+        """Value an upload remembers at its start and compares later; see _end_uploads."""
+        return self._upload_epoch
+
+    @property
     def authenticated_session(self) -> Optional[AuthenticatedSession]:
         context = self._auth_session
         if (context is not None and context.transport is self._sock and
@@ -324,6 +361,10 @@ class MaxClient:
             # connect+LOGIN на том же токене.
             self._stop_reconnect()
             self._closed = False
+            # A user-initiated connect may log in another account: uploads and the
+            # learned dialog peers of the previous session must not reach it.
+            self._end_uploads()
+            self._chat_peer.clear()
         else:
             # auto-путь: если пока мы выходили из ожидания, пользователь
             # закрыл/перелогинился — отменяем попытку до I/O, чтобы не порвать
@@ -334,7 +375,7 @@ class MaxClient:
         # Один MaxClient владеет одним текущим транспортом; старый закрывается
         # перед новым connect, чтобы его reader не вмешивался в новую сессию.
         if self._sock is not None:
-            self._teardown_socket()
+            self._teardown_socket(final=reset_closed)
         self._set_state(ConnectionState.CONNECTING)
         tls = None
         try:
@@ -363,7 +404,9 @@ class MaxClient:
             # join мог истечь раньше нашего таймаута), его не трогаем — иначе
             # убили бы живую сессию. tls=None → свой сокет не публиковали.
             if tls is not None:
-                self._teardown_socket(only=tls)
+                # A failed automatic attempt is not the end of the session: running
+                # uploads keep waiting for the next attempt.
+                self._teardown_socket(only=tls, final=reset_closed)
             if not self.is_connected:
                 self._set_state(ConnectionState.DISCONNECTED)
             raise
@@ -393,9 +436,15 @@ class MaxClient:
         # _closed (его видят re-check'и в цикле) + сверка сокета в _handle_drop.
         self._stop_reconnect(join_timeout=0.0)
         self._teardown_socket()
+        # With no socket left _teardown_socket has nothing to report, but uploads of
+        # this session must stop all the same. The next login may be another account,
+        # so the learned dialog peers go too.
+        self._end_uploads()
+        self._chat_peer.clear()
         self._set_state(ConnectionState.DISCONNECTED)
 
-    def _teardown_socket(self, only: Optional[ssl.SSLSocket | _WebSocketTransport] = None) -> None:
+    def _teardown_socket(self, only: Optional[ssl.SSLSocket | _WebSocketTransport] = None, *,
+                         final: bool = True) -> None:
         # only!=None — рвём, ТОЛЬКО если это всё ещё текущий сокет. Иначе
         # «опоздавший» reconnect-поток (его connect() висел в сетевом I/O дольше,
         # чем барьер join ждал) закрыл бы свежий сокет пользовательского connect()
@@ -415,15 +464,94 @@ class MaxClient:
                 sock.close()
             except Exception:
                 pass
-        self._fail_all_pending(MaxNotConnected("disconnected"))
+        self._fail_all_pending(MaxNotConnected("disconnected"), final=final)
 
-    def _fail_all_pending(self, error: BaseException) -> None:
+    def _fail_all_pending(self, error: BaseException, *, final: bool = True) -> None:
+        """Fail every request in flight. final=False is a drop that auto-reconnect repairs.
+
+        Requests die with their socket either way. Uploads end only with the session:
+        MAX sends the ready push after the whole body arrived, and the official WEB
+        client keeps its pending uploads across a socket loss as well. A kept upload
+        still ends by its own timeout if the push never comes.
+        """
         with self._pending_lock:
             pendings = list(self._pending.values())
             self._pending.clear()
         for p in pendings:
             p.error = error
             p.event.set()
+        if final:
+            self._end_uploads()
+
+    def _end_uploads(self) -> None:
+        """This session is over: release every upload wait and stop running bodies."""
+        with self._attach_lock:
+            self._upload_epoch += 1
+            waiters = list(self._attach_waiters.values())
+            self._attach_waiters.clear()
+        for waiter in waiters:
+            waiter.error = "connection"
+            waiter.event.set()
+
+    def _end_uploads_if_offline(self) -> None:
+        """The reconnect worker stops for good. With no socket left nobody will deliver
+        a ready push, so uploads kept across the drop must not wait out their limit."""
+        if self._sock is None:
+            self._end_uploads()
+
+    # ───────────────────────── attachment-ready push ─────────────────────────
+
+    ATTACH_READY_FIELDS = ("fileId", "videoId", "audioId")
+
+    def expect_attach_ready(self, id_field: str, ident: int, *, epoch: Optional[int] = None) -> _AttachWaiter:
+        """Register one uploaded file, video or audio for its NOTIF_ATTACH push.
+
+        Register before the HTTP upload starts: the push can outrun the HTTP
+        answer. The caller waits on the returned object and always cancels it.
+        epoch is upload_epoch as read before the upload opcode was asked: a wait
+        registered after the session ended would have nobody left to release it.
+        """
+        if id_field not in self.ATTACH_READY_FIELDS or type(ident) is not int:
+            raise ValueError("Unsupported attachment identifier")
+        waiter = _AttachWaiter((id_field, ident), self._release_attach_waiter)
+        with self._attach_lock:
+            if epoch is not None and epoch != self._upload_epoch:
+                raise MaxUploadError("Загрузка остановлена: соединение с MAX закрыто.")
+            if waiter.key in self._attach_waiters:
+                raise MaxUploadError("Это вложение уже загружается.")
+            self._attach_waiters[waiter.key] = waiter
+        return waiter
+
+    def _release_attach_waiter(self, waiter: _AttachWaiter) -> None:
+        with self._attach_lock:
+            if self._attach_waiters.get(waiter.key) is waiter:
+                del self._attach_waiters[waiter.key]
+
+    def _attach_ready_push(self, data: Any) -> None:
+        """NOTIF_ATTACH {videoId?, audioId?, fileId?, error?}: release matching uploads."""
+        if not isinstance(data, dict):
+            return
+        # The schema declares error as a string. Any other non-empty value is still a
+        # refusal: an attachment MAX marked with an error must not be sent.
+        failed = bool(data.get("error"))
+        present, matched = [], []
+        for id_field in self.ATTACH_READY_FIELDS:
+            value = data.get(id_field)
+            if type(value) is float and value.is_integer():
+                value = int(value)
+            if type(value) is not int:
+                continue
+            present.append(id_field)
+            with self._attach_lock:
+                waiter = self._attach_waiters.pop((id_field, value), None)
+            if waiter is not None:
+                matched.append(waiter)
+        # Field names only: identifiers and the server's error text stay out of the log.
+        # Written before the uploads wake up, so their own log lines follow this one.
+        self._debug(f"attach push: fields={'+'.join(present) or 'none'} matched={len(matched)} error={failed}")
+        for waiter in matched:
+            waiter.error = "processing" if failed else None
+            waiter.event.set()
 
     # ───────────────────────── reader thread ─────────────────────────
 
@@ -516,6 +644,9 @@ class MaxClient:
             pending.frame = frame
             pending.event.set()
             return
+        if frame.cmd == 0 and frame.opcode == opcodes.NOTIF_ATTACH:
+            # Release the upload waiting for this attachment; the push is still delivered below.
+            self._attach_ready_push(frame.decoded)
         # Кадр без нашего seq — это push от сервера.
         if frame.cmd == 0 and self.on_push:
             try:
@@ -534,7 +665,10 @@ class MaxClient:
         if self._sock is None and self._closed:
             return
         self._auth_session = None
-        self._fail_all_pending(MaxNotConnected("socket closed"))
+        # A drop that auto-reconnect is about to repair fails the requests in flight
+        # and keeps running uploads; see _fail_all_pending.
+        transient = not self._closed and self.auto_reconnect and bool(self._token)
+        self._fail_all_pending(MaxNotConnected("socket closed"), final=not transient)
         try:
             if self._sock is not None:
                 self._sock.close()
@@ -565,6 +699,7 @@ class MaxClient:
         self._stop_reconnect(join_timeout=0.0)
         if sock is not None:
             self._teardown_socket(only=sock)
+        self._end_uploads()  # also when that socket is already gone
         if not self.is_connected:
             self._set_state(ConnectionState.DISCONNECTED)
         if self.on_auth_invalid:
@@ -743,6 +878,7 @@ class MaxClient:
                                 with self._reconnect_lock:
                                     if self._reconnect_stop is ev:
                                         self._stop_reconnect(join_timeout=0.0)
+                                        self._end_uploads_if_offline()
                                 return  # A newer LOGIN owns the same or a replacement socket.
                             raise MaxWriteOutcomeUnknown("Reconnected account state was not confirmed") from None
                         if self._reconnect_stop is not ev:
@@ -751,6 +887,7 @@ class MaxClient:
                             with self._reconnect_lock:
                                 if self._reconnect_stop is ev:
                                     self._stop_reconnect(join_timeout=0.0)
+                                    self._end_uploads_if_offline()
                             return
                         if accepted is False:
                             raise MaxWriteOutcomeUnknown("Reconnected account state was not confirmed")
@@ -799,6 +936,7 @@ class MaxClient:
                         self._stop_reconnect(join_timeout=0.0)
                     if my_sock is not None:
                         self._teardown_socket(only=my_sock)
+                    self._end_uploads_if_offline()  # also when the reader has already dropped that socket
                     if not self.is_connected:
                         self._set_state(ConnectionState.DISCONNECTED)
                 return
@@ -1837,12 +1975,16 @@ class MaxClient:
         return _str_keys(f.decoded) if isinstance(f.decoded, dict) else {}
 
     def request_video_upload(
-        self, type_: str = "VIDEO", count: int = 1, uploader_type: str = "VIDEO"
+        self, count: int = 1, *, media_type: Optional[int] = None, uploader_type: Optional[int] = None
     ) -> dict:
-        f = self.request(
-            opcodes.VIDEO_UPLOAD,
-            {"type": type_, "count": count, "uploaderType": uploader_type},
-        )
+        """VIDEO_UPLOAD 82. The official WEB client sends {count} for a video file and
+        numeric type/uploaderType for a voice message (type 2) or a video message (type 1)."""
+        payload: dict[str, Any] = {"count": count}
+        if media_type is not None:
+            payload["type"] = _require_packet_int(media_type, "media_type")
+            payload["uploaderType"] = _require_packet_int(0 if uploader_type is None else uploader_type,
+                                                          "uploader_type")
+        f = self.request(opcodes.VIDEO_UPLOAD, payload)
         if not f.ok:
             raise MaxError(f"VIDEO_UPLOAD: {f.error_text()}")
         return _str_keys(f.decoded) if isinstance(f.decoded, dict) else {}

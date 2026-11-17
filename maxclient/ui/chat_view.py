@@ -1293,13 +1293,29 @@ class ChatView(QWidget):
         chat_id = self.chat.id
         text = self.input.toPlainText().strip()
         self.input.clear()
-        run_async(
-            self.service.send_media, chat_id, path, kind,
-            text=text,
-            on_done=lambda _m: self._after_send(chat_id),
-            on_error=lambda e: self._media_error(chat_id, e),
-        )
-        self.reload()
+        self._send_media_async(self.service.send_media, chat_id, path, kind, text=text)
+
+    def _send_media_async(self, method, chat_id: int, *args, **options) -> None:
+        """Queue a media send. An upload runs for minutes, so the stored pending row is
+        shown as soon as the worker has written it, and the answer may find this view
+        closed or another account signed in."""
+        binding = self._capture_history_context()
+        owner = getattr(self.service, 'my_id', None)
+        hint = self._pending_text_stored
+        options['on_pending'] = lambda: hint.emit(chat_id, binding)
+
+        def complete(message=None, error=None):
+            if not isValid(self) or getattr(self.service, 'my_id', None) != owner:
+                return
+            if error is not None:
+                self._media_error(chat_id, error)
+            else:
+                # send_media returns the stored message even when the upload failed, so
+                # the reason is shown the same way as for a text message.
+                self._on_sent(chat_id, message)
+
+        run_async(method, chat_id, *args, **options,
+                  on_done=complete, on_error=lambda error: complete(error=error))
 
     def _media_error(self, chat_id: int, message: str) -> None:
         self._after_send(chat_id)
@@ -1338,13 +1354,7 @@ class ChatView(QWidget):
         self.voice_btn.setToolTip("Записать голосовое сообщение")
         if self.chat is None or not path:
             return
-        chat_id = self.chat.id
-        run_async(
-            self.service.send_voice, chat_id, path, duration_ms,
-            on_done=lambda _m: self._after_send(chat_id),
-            on_error=lambda e: self._media_error(chat_id, e),
-        )
-        self.reload()
+        self._send_media_async(self.service.send_voice, self.chat.id, path, duration_ms)
 
     def _on_voice_cancelled(self) -> None:
         self.voice_btn.setIcon(line_icon('microphone', palette_for(self.settings.theme).text_dim))

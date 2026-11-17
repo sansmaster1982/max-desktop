@@ -461,11 +461,32 @@ class Message:
         return None
 
     @property
+    def control_preview_text(self) -> Optional[str]:
+        """Chat-row line of a proven system event: the server's own wording.
+
+        CONTROL 'system' carries ready text. The web client (CebawyPl.js and
+        CD8T5ciD.js, November 2026) renders content.message as is in the chat
+        row and in the bubble and never reads shortMessage. Other events,
+        forwarded content and unproven cache rows keep their local label.
+        """
+        if self.display_source != 'outer' or not self.attaches:
+            return None
+        first = self.attaches[0]
+        if (first.type == A_CONTROL and first.control_metadata_confirmed is True
+                and first.control_event == 'system' and isinstance(first.control_message, str)
+                and first.control_message.strip()):
+            return first.control_message
+        return None
+
+    @property
     def preview(self) -> str:
         if self.control_display_text is not None:
             return self.control_display_text
         if self.display_text:
             return self.display_text
+        caption = self.control_preview_text
+        if caption is not None:
+            return caption
         if self.display_attaches:
             return f"[{self.display_attaches[0].label}]"
         if self.display_source != 'outer':

@@ -10,10 +10,13 @@ import ast
 import re
 import copy
 import math
+import shutil
+import tempfile
 import threading
 import time
 import uuid
 from collections import deque, OrderedDict
+from contextlib import contextmanager
 from typing import Callable, Optional
 from urllib.parse import urlsplit
 
@@ -21,9 +24,11 @@ from ..protocol.client import (ConnectionState, MaxClient, MaxFrame, MaxLoginFai
                                MaxNotConnected, MaxTimeout, MaxWriteOutcomeUnknown)
 from ..protocol.folder_contracts import FOLDER_FILTERS, FOLDER_OPTIONS
 from ..protocol.settings_contracts import privacy_values, user_setting_values, chat_notification_values
+from ..protocol.errors import MaxUploadError
 from ..protocol.uploader import AttachKind, upload_and_build_attach
 from .config import AppPaths, Session, Settings, _load_or_create_device_profile
 from .models import Attach, Chat, Contact, Message, Profile, parse_reaction_info, parse_message_link, server_attaches
+from .photo_prepare import prepare_photo
 from .store import Store
 from .folder_block_service import FolderBlockServiceMixin
 from .incoming_calls import IncomingCallNotice, parse_incoming_call
@@ -172,6 +177,53 @@ class _ChatMetadataHydration:
             self.idle.set()
 
 
+# One writer at a time for debug.log: see MaxService._log_debug.
+_LOG_WRITE_LOCK = threading.Lock()
+
+# VIDEO_PLAY 83 answers with one address per rendition, not with "url". The field
+# names come from the reply schema of the official WEB client (build 22163, chunk
+# CebawyPl.js). Progressive MP4 goes first, best quality first; the streaming
+# manifests follow; "url" stays last for older replies.
+_VIDEO_PLAY_FIELDS = ("MP4_1080", "MP4_720", "MP4_480", "MP4_360", "MP4_240", "MP4_144",
+                      "HLS", "O_HLS", "DASH", "O_DASH", "EXTERNAL", "url")
+
+
+def _video_play_url(reply) -> Optional[str]:
+    """Pick one playable https address from a VIDEO_PLAY reply, or None."""
+    if not isinstance(reply, dict):
+        return None
+    for name in _VIDEO_PLAY_FIELDS:
+        value = reply.get(name)
+        if isinstance(value, str) and value.startswith("https://"):
+            return value
+    return None
+
+
+# Сколько секунд сообщение с загруженным вложением ждёт новую сессию после обрыва.
+UPLOAD_SESSION_WAIT = 60.0
+
+
+@contextmanager
+def _upload_source(path: str, kind: AttachKind, log=None):
+    """Файл, который уходит на сервер вместо path.
+
+    Фото пересохраняется без метаданных во временный каталог (см. photo_prepare);
+    каталог удаляется, когда загрузка закончилась. Остальное уходит как есть.
+    """
+    if kind != AttachKind.PHOTO:
+        yield path
+        return
+    try:
+        workdir = tempfile.mkdtemp(prefix="maxim-photo-")
+    except OSError:
+        yield path
+        return
+    try:
+        yield prepare_photo(path, workdir, log=log)
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoServiceMixin,
                  ConversationActionsServiceMixin, ConversationFileServiceMixin, TimelineFileServiceMixin,
                  MessageAppServiceMixin, ContactCreateServiceMixin, ConversationCreateServiceMixin,
@@ -183,6 +235,11 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         self.settings = settings
         self.session = session
         self.store = Store(paths.db_file)
+        # Отправки, оборванные закрытием программы, завершиться уже не могут.
+        try:
+            self.store.settle_interrupted_messages()
+        except Exception:  # noqa: BLE001 - старт важнее пометки старых строк
+            pass
 
         # Лог протокола для диагностики: %APPDATA%\MAX Desktop\debug.log,
         # перезаписывается при старте сессии. Непустой лог прошлой сессии
@@ -275,8 +332,10 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         self._contacts_cache = None
 
     def _log_debug(self, msg: str) -> None:
+        # Reader, keepalive and worker threads all log. On Windows two appends that
+        # start together land on the same offset and one line overwrites the other.
         try:
-            with open(self._log_path, "a", encoding="utf-8") as f:
+            with _LOG_WRITE_LOCK, open(self._log_path, "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
         except OSError:
             pass
@@ -644,8 +703,11 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         """Upload an explicitly chosen profile photo using the server's profile URL."""
         if self.my_id is None:
             raise MaxLoginFailed("Сначала войдите в свой профиль MAX")
-        attach = upload_and_build_attach(self.client, path, AttachKind.PHOTO,
-                                          on_progress=on_progress, profile=True)
+        upload_owner = self._upload_owner()
+        with _upload_source(path, AttachKind.PHOTO, self._log_debug) as source:
+            attach = upload_and_build_attach(self.client, source, AttachKind.PHOTO,
+                                              on_progress=on_progress, profile=True)
+        self._wait_upload_session(upload_owner)
         token = attach.get("photoToken") if isinstance(attach, dict) else None
         if not isinstance(token, str) or not token:
             raise ValueError("MAX не вернул токен загруженного фото профиля")
@@ -1635,7 +1697,9 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         text: str = "",
         duration_ms: Optional[int] = None,
         on_progress: Optional[Callable[[float], None]] = None,
+        on_pending: Optional[Callable[[], None]] = None,
     ) -> Message:
+        upload_owner = self._upload_owner()
         local_id = str(uuid.uuid4())
         pending = Message(
             chat_id=chat_id, sender=self.my_id, text=text,
@@ -1645,10 +1709,17 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
         )
         self.store.insert_message(pending)
         self.store.update_chat_preview(chat_id, pending.time_ms, pending.preview)
+        if callable(on_pending):
+            try:
+                on_pending()  # Display hint for the stored pending row; never alters the send.
+            except Exception:
+                pass
         try:
-            attach = upload_and_build_attach(
-                self.client, path, kind, duration_ms=duration_ms, on_progress=on_progress
-            )
+            with _upload_source(path, kind, self._log_debug) as source:
+                attach = upload_and_build_attach(
+                    self.client, source, kind, duration_ms=duration_ms, on_progress=on_progress
+                )
+            self._wait_upload_session(upload_owner)
             is_group = self._prime_peer(chat_id)
             res = self.client.send_message(
                 chat_id, text, attaches=[attach], allow_dialog_fallback=not is_group
@@ -1660,12 +1731,42 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
             self._pending_failure(pending, e)
         return pending
 
+    def _upload_owner(self):
+        """Who starts an upload: the account and the upload generation of its connection.
+
+        An upload runs for minutes and can outlive a logout. MaxClient is one object
+        for every account, so its upload_epoch tells a later session from this one.
+        """
+        return self.my_id, self.client, getattr(self.client, "upload_epoch", None)
+
+    def _require_upload_owner(self, upload_owner) -> None:
+        owner, client, epoch = upload_owner
+        if self.my_id != owner or self.client is not client or getattr(client, "upload_epoch", None) != epoch:
+            raise MaxUploadError("Аккаунт или соединение изменились во время загрузки. Отправка отменена.")
+
+    def _wait_upload_session(self, upload_owner) -> None:
+        """An upload may end while the client is reconnecting. Nothing has been written
+        to a socket yet, so the message waits for the next session of the same account;
+        sending at once would end as an unknown outcome for a message that never left."""
+        deadline = time.monotonic() + UPLOAD_SESSION_WAIT
+        while True:
+            self._require_upload_owner(upload_owner)
+            # A client double without this attribute counts as connected.
+            if getattr(self.client, "authenticated_session", True) is not None:
+                return
+            if time.monotonic() >= deadline:
+                raise MaxUploadError("Нет соединения с MAX: вложение загружено, но сообщение не отправлено. "
+                                     "Повторите отправку.")
+            time.sleep(0.2)
+
     def send_voice(
         self, chat_id: int, path: str, duration_ms: Optional[int] = None,
         on_progress: Optional[Callable[[float], None]] = None,
+        on_pending: Optional[Callable[[], None]] = None,
     ) -> Message:
         return self.send_media(
-            chat_id, path, AttachKind.AUDIO, duration_ms=duration_ms, on_progress=on_progress
+            chat_id, path, AttachKind.AUDIO, duration_ms=duration_ms, on_progress=on_progress,
+            on_pending=on_pending,
         )
 
     # ───────────────────────── download ─────────────────────────
@@ -1684,10 +1785,10 @@ class MaxService(FolderBlockServiceMixin, SearchServiceMixin, ConversationInfoSe
                     video_id=attach.file_id, chat_id=chat_id, message_id=message_id,
                     token=attach.token,
                 )
-            else:
-                res = self.client.request_file_download(
-                    file_id=attach.file_id, chat_id=chat_id, message_id=message_id
-                )
+                return _video_play_url(res)
+            res = self.client.request_file_download(
+                file_id=attach.file_id, chat_id=chat_id, message_id=message_id
+            )
             url = res.get("url")
             return str(url) if url else None
         except Exception:

@@ -638,6 +638,17 @@ class Store:
                 "AND server_id IS NULL AND status='pending'", (status, chat_id, local_id))
         return cursor.rowcount == 1
 
+    def settle_interrupted_messages(self) -> int:
+        """Mark rows a previous run left "pending" as unknown; call once at start.
+
+        Their worker threads ended with that process, so nothing can finish them. The
+        packet may or may not have left, hence "unknown" and not "failed".
+        """
+        with self._lock, self._db:
+            cursor = self._db.execute(
+                "UPDATE messages SET status='unknown' WHERE server_id IS NULL AND status='pending'")
+        return cursor.rowcount
+
     def apply_message_ack(self, chat_id: int, raw: dict, *, local_id: Optional[str] = None,
                           my_id: Optional[int] = None, outgoing: Optional[bool] = None,
                           replay: bool = False) -> Message:
