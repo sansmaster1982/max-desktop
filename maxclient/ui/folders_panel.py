@@ -20,6 +20,7 @@ from .widgets.line_icon import line_icon
 from .widgets.toggle_switch import ToggleSwitch
 from ..core.i18n import normalize_language, tr
 from ..protocol.client import MaxError, MaxWriteNotStarted, MaxWriteOutcomeUnknown
+from ..protocol.folder_contracts import FOLDER_FILTERS, FOLDER_OPTIONS
 
 
 ALL_FOLDER = 'all.chat.folder'
@@ -60,9 +61,9 @@ def _folder_snapshot(value):
         for key in ('include', 'favorites'):
             if key in record and (not isinstance(record[key], list) or not all(map(is_identity, record[key]))):
                 raise ValueError('Invalid chat identities')
-        for key, maximum in (('filters', 14), ('options', 4)):
+        for key, allowed in (('filters', FOLDER_FILTERS), ('options', FOLDER_OPTIONS)):
             if key in record and (not isinstance(record[key], list)
-                    or any(type(item) is not int or not 0 <= item <= maximum for item in record[key])):
+                    or any(type(item) is not int or item not in allowed for item in record[key])):
                 raise ValueError('Invalid folder flags')
     return value
 
@@ -305,6 +306,7 @@ class FoldersPanel(QWidget):
         self._records = {}
         self._selected = None
         self._baseline = {}
+        self._kept_filters = []
         self._touched = set()
         self._pending = None
         self._language = normalize_language(getattr(getattr(parent, 'settings', None), 'ui_language', 'ru'))
@@ -857,7 +859,11 @@ class FoldersPanel(QWidget):
         self.title.setText(self._baseline.get('title', ''))
         names = known_chats(self.service)
         self.include.set_ids(names, self._baseline.get('include', []))
-        self.include.set_filters(self._baseline.get('filters', []))
+        filters = self._baseline.get('filters', [])
+        # A server filter without a control here (WEB 26.11.3 filter 15) is not
+        # offered for editing and is saved back unchanged with the others.
+        self._kept_filters = [value for value in filters if value >= len(self.filters)]
+        self.include.set_filters([value for value in filters if value < len(self.filters)])
         self._include_draft = self.include.values()
         self.favorites.set_ids(self._baseline.get('favorites', []), names)
         for index, checkbox in enumerate(self.filters):
@@ -933,7 +939,8 @@ class FoldersPanel(QWidget):
 
     def _values(self):
         return {'title': self.title.text().strip(), 'include': self.include.values(),
-                'filters': [index for index, checkbox in enumerate(self.filters) if checkbox.isChecked()],
+                'filters': [index for index, checkbox in enumerate(self.filters) if checkbox.isChecked()]
+                           + self._kept_filters,
                 'favorites': self.favorites.values()}
 
     def _patch(self):

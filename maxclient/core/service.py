@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from ..protocol.client import (ConnectionState, MaxClient, MaxFrame, MaxLoginFailed,
                                MaxNotConnected, MaxTimeout, MaxWriteOutcomeUnknown)
+from ..protocol.folder_contracts import FOLDER_FILTERS, FOLDER_OPTIONS
 from ..protocol.settings_contracts import privacy_values, user_setting_values, chat_notification_values
 from ..protocol.uploader import AttachKind, upload_and_build_attach
 from .config import AppPaths, Session, Settings, _load_or_create_device_profile
@@ -3143,9 +3144,11 @@ def _folder_from_data(raw) -> dict:
     for key in ("include", "favorites"):
         if key in raw and (not isinstance(raw[key], list) or any(not _is_read_int(value) for value in raw[key])):
             raise ValueError("MAX вернул неверные идентификаторы чатов папки")
-    for key, limit in (("filters", 14), ("options", 4)):
+    # The accepted values live in folder_contracts, shared with folder_dto and
+    # folder_payload: a second copy here once lagged behind WEB 26.11.3.
+    for key, allowed in (("filters", FOLDER_FILTERS), ("options", FOLDER_OPTIONS)):
         if key in raw and (not isinstance(raw[key], list)
-                or any(type(value) is not int or not 0 <= value <= limit for value in raw[key])):
+                or any(type(value) is not int or value not in allowed for value in raw[key])):
             raise ValueError("MAX вернул неподтверждённые параметры папки")
     for key in ("updateTime", "sourceId"):
         if key in raw and not _is_read_int(raw[key]):
